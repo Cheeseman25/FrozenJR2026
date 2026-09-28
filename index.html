@@ -74,6 +74,31 @@
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
+    // Helper: Universal Clickable Link Renderer for text fields
+    function renderWithLinks(text) {
+      if (!text || typeof text !== 'string') return text;
+      const urlRegex = /(https?:\/\/[^\s]+|meet\.google\.com\/[a-zA-Z0-9_-]+)/g;
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (part && (part.match(/^https?:\/\//) || part.match(/^meet\.google\.com/))) {
+          const href = part.startsWith('http') ? part : `https://${part}`;
+          return (
+            <a
+              key={i}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-300 hover:text-cyan-100 underline decoration-cyan-400 font-semibold break-all inline-flex items-center gap-0.5"
+            >
+              <span>{part}</span>
+              <span className="text-[10px] no-underline">↗</span>
+            </a>
+          );
+        }
+        return part;
+      });
+    }
+
     // Helper: Dynamic Single-Header CSV Parser
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
@@ -136,6 +161,7 @@
     const INITIAL_CALL_TYPES = [
       'Saturday Company (Full Cast)',
       'Wednesday Partial Call',
+      'Parent Meeting',
       'Principals Vocal Clinic',
       'Choreography Blocking',
       'Music & Harmonies',
@@ -183,7 +209,6 @@
         const saved = localStorage.getItem('frozen_rehearsals');
         return saved ? JSON.parse(saved) : [];
       });
-      const [isSyncingBackend, setIsSyncingBackend] = useState(false);
       const [backendStatus, setBackendStatus] = useState('Checking connection...');
 
       const [callSearchRole, setCallSearchRole] = useState('');
@@ -253,7 +278,6 @@
       // Fetch Live Rehearsals from Google Sheet Backend
       const fetchBackendRehearsals = async () => {
         if (!CALLBOARD_BACKEND_URL) return;
-        setIsSyncingBackend(true);
         try {
           const res = await fetch(`${CALLBOARD_BACKEND_URL}?t=${Date.now()}`);
           const data = await res.json();
@@ -270,8 +294,6 @@
         } catch (e) {
           console.log('Backend sync offline, using local storage.');
           setBackendStatus('Offline / Local Storage Mode');
-        } finally {
-          setIsSyncingBackend(false);
         }
       };
 
@@ -599,13 +621,13 @@
                               {reh.type}
                             </span>
                             {reh.location && (
-                              <span className="text-xs font-semibold text-slate-400">
-                                📍 {reh.location}
+                              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                                📍 {renderWithLinks(reh.location)}
                               </span>
                             )}
                           </div>
                           <h3 className="text-xl font-bold text-white font-cinzel">
-                            {reh.title || 'Rehearsal Call'}
+                            {renderWithLinks(reh.title || 'Rehearsal Call')}
                           </h3>
                         </div>
 
@@ -663,7 +685,7 @@
                           {Array.isArray(reh.focusScenes) && reh.focusScenes.length > 0 ? (
                             <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
                               {reh.focusScenes.map((sc, i) => (
-                                <li key={i}><span className="font-semibold text-slate-200">{sc}</span></li>
+                                <li key={i}><span className="font-semibold text-slate-200">{renderWithLinks(sc)}</span></li>
                               ))}
                             </ul>
                           ) : (
@@ -673,9 +695,9 @@
                       </div>
 
                       {reh.notes && (
-                        <div className="mt-3 text-xs text-cyan-200/80 bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg flex items-start gap-2">
+                        <div className="mt-3 text-xs text-cyan-200/90 bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg flex items-start gap-2">
                           <span className="text-cyan-400 font-bold">📝 Note:</span>
-                          <span>{reh.notes}</span>
+                          <span className="leading-relaxed">{renderWithLinks(reh.notes)}</span>
                         </div>
                       )}
 
@@ -1133,12 +1155,12 @@
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-bold mb-1">Room / Location</label>
+                      <label className="block text-slate-300 font-bold mb-1">Room / Location (URLs work here)</label>
                       <input 
                         type="text"
                         value={editCallData.location}
                         onChange={(e) => setEditCallData({...editCallData, location: e.target.value})}
-                        placeholder="e.g., Main Stage / Chorus Rm"
+                        placeholder="e.g., Main Stage or https://meet.google.com/..."
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
                       />
                     </div>
@@ -1315,7 +1337,7 @@
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">Production Notes for Parents/Cast</label>
+                    <label className="block text-slate-300 font-bold mb-1">Production Notes for Parents/Cast (URLs work here)</label>
                     <textarea 
                       rows="2"
                       value={editCallData.notes}
