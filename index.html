@@ -66,7 +66,13 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // --- Helper: Convert Google Drive Share Link to Direct Streamable URL ---
+    // --- Production Master Integrations ---
+    const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
+    
+    // Live Google Sheet CSV Endpoint
+    const CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
+
+    // Helper: Convert Google Drive Share Link to Direct Streamable URL
     function formatDriveAudioUrl(url) {
       if (!url) return '';
       const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
@@ -76,8 +82,75 @@
       return url;
     }
 
-    // --- Production Master Data ---
-    const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
+    // Helper: Robust CSV Line Parser (handles quotes and commas)
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
+      if (lines.length < 2) return [];
+
+      function parseRow(rowStr) {
+        const result = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < rowStr.length; i++) {
+          const char = rowStr[i];
+          if (char === '"' || char === "'") {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(cur.trim().replace(/^["']|["']$/g, ''));
+            cur = '';
+          } else {
+            cur += char;
+          }
+        }
+        result.push(cur.trim().replace(/^["']|["']$/g, ''));
+        return result;
+      }
+
+      const rawHeaders = parseRow(lines[0]);
+      const headers = rawHeaders.map(h => h.toLowerCase());
+
+      // Fuzzy column finder
+      const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
+      const snowIdx = headers.findIndex(h => h.includes('snow') || h.includes('cast a') || h.includes('cast 1'));
+      const iceIdx = headers.findIndex(h => h.includes('ice') || h.includes('cast b') || h.includes('cast 2'));
+      const catIdx = headers.findIndex(h => h.includes('category') || h.includes('type') || h.includes('group') || h.includes('tier'));
+      const actorIdx = headers.findIndex(h => h.includes('actor') || h.includes('name') || h.includes('member'));
+
+      return lines.slice(1).map((line, rowIdx) => {
+        const cols = parseRow(line);
+        const role = (roleIdx !== -1 ? cols[roleIdx] : cols[0]) || `Role #${rowIdx + 1}`;
+        
+        let castSnow = snowIdx !== -1 ? cols[snowIdx] : (actorIdx !== -1 ? cols[actorIdx] : cols[1] || 'TBD');
+        let castIce = iceIdx !== -1 ? cols[iceIdx] : cols[2] || castSnow || 'TBD';
+        let category = catIdx !== -1 ? cols[catIdx] : '';
+
+        // Auto determine category if empty
+        const lowerRole = role.toLowerCase();
+        if (!category) {
+          if (lowerRole.includes('chorus') || lowerRole.includes('ensemble') || lowerRole.includes('towns') || lowerRole.includes('hidden folk')) {
+            category = 'Chorus/Ensemble';
+          } else if (['elsa', 'anna', 'kristoff', 'olaf', 'hans'].some(l => lowerRole.includes(l))) {
+            category = 'Lead';
+          } else {
+            category = 'Featured';
+          }
+        }
+
+        const isChorus = category.toLowerCase().includes('chorus') || 
+                         category.toLowerCase().includes('ensemble') || 
+                         lowerRole.includes('chorus') || 
+                         lowerRole.includes('ensemble');
+
+        return {
+          id: 'role-' + rowIdx,
+          role,
+          castSnow: castSnow || 'TBD',
+          castIce: castIce || 'TBD',
+          category,
+          isChorus
+        };
+      });
+    }
 
     const INITIAL_REHEARSALS = [
       {
@@ -86,8 +159,8 @@
         date: '2026-10-03',
         time: '9:00 AM - 1:00 PM',
         location: 'Main Auditorium / Stage',
-        calledRoles: ['Full Cast', 'All Ensemble', 'Snow Chorus'],
-        focusScenes: ['Prologue', 'Fixer Upper (All)', 'Finale Act 2'],
+        calledRoles: ['Full Cast', 'All Chorus', 'All Ensemble'],
+        focusScenes: ['Prologue', 'Fixer Upper (Company)', 'Finale Act 2'],
         notes: 'Bring dance shoes, rehearsal script, labeled water bottle. Saturday run-throughs decide Wednesday break-outs.',
         type: 'Full Cast'
       },
@@ -113,25 +186,6 @@
         notes: 'Full run-through of Act 1 without stopping. Line-notes following run.',
         type: 'Full Cast'
       }
-    ];
-
-    const CAST_MEMBERS = [
-      { role: 'Elsa', castSnow: 'Avery S.', castIce: 'Lilly M.', category: 'Lead' },
-      { role: 'Anna', castSnow: 'Cecilia R.', castIce: 'Elena V.', category: 'Lead' },
-      { role: 'Kristoff', castSnow: 'Noah P.', castIce: 'Noah P.', category: 'Principal' },
-      { role: 'Olaf', castSnow: 'Liam W.', castIce: 'Lucas B.', category: 'Principal' },
-      { role: 'Hans', castSnow: 'Jackson T.', castIce: 'Mason D.', category: 'Principal' },
-      { role: 'Sven', castSnow: 'Oliver C.', castIce: 'Oliver C.', category: 'Principal' },
-      { role: 'Young Elsa', castSnow: 'Maya G.', castIce: 'Charlotte K.', category: 'Featured' },
-      { role: 'Young Anna', castSnow: 'Harper B.', castIce: 'Chloe W.', category: 'Featured' },
-      { role: 'Middle Elsa', castSnow: 'Sophia L.', castIce: 'Emma R.', category: 'Featured' },
-      { role: 'Middle Anna', castSnow: 'Ava H.', castIce: 'Grace M.', category: 'Featured' },
-      { role: 'Oaken', castSnow: 'Ethan K.', castIce: 'Samuel J.', category: 'Featured' },
-      { role: 'King Agnarr', castSnow: 'Benjamin D.', castIce: 'Benjamin D.', category: 'Featured' },
-      { role: 'Queen Iduna', castSnow: 'Isabella C.', castIce: 'Isabella C.', category: 'Featured' },
-      { role: 'Pabbie & Bulda', castSnow: 'Caleb & Nora', castIce: 'Daniel & Zoey', category: 'Featured' },
-      { role: 'Townspeople & Hidden Folk', castSnow: 'Snow Ensemble', castIce: 'Ice Ensemble', category: 'Ensemble' },
-      { role: 'Snow Chorus / Dancers', castSnow: 'Snow Chorus', castIce: 'Ice Chorus', category: 'Ensemble' }
     ];
 
     const DEFAULT_AUDIO_TRACKS = [
@@ -198,7 +252,14 @@
       const [showLoginModal, setShowLoginModal] = useState(false);
       const [adminPinInput, setAdminPinInput] = useState('');
       const [adminPinError, setAdminPinError] = useState('');
-      const [adminPin] = useState('1234'); // Stage Manager PIN
+      const [adminPin] = useState('1234');
+
+      // Live Google Sheet Cast State
+      const [castList, setCastList] = useState([]);
+      const [isLoadingCast, setIsLoadingCast] = useState(true);
+      const [castError, setCastError] = useState(null);
+      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL');
+      const [castFilterQuery, setCastFilterQuery] = useState('');
 
       const [rehearsals, setRehearsals] = useState(() => {
         const saved = localStorage.getItem('frozen_rehearsals');
@@ -210,7 +271,6 @@
         return saved ? JSON.parse(saved) : DEFAULT_AUDIO_TRACKS;
       });
 
-      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL'); // 'ALL', 'SNOW', 'ICE'
       const [callSearchRole, setCallSearchRole] = useState('');
 
       // Audio Player
@@ -235,10 +295,32 @@
         notes: ''
       });
 
-      const QUICK_ROLES = [
-        'Full Cast', 'Snow Cast', 'Ice Cast', 'Elsa', 'Anna', 'Olaf', 'Kristoff', 'Sven', 'Hans',
-        'Young Elsa/Anna', 'Hidden Folk', 'Snow Chorus', 'Oaken Family'
-      ];
+      // Fetch Live Cast from Google Sheets CSV
+      const loadLiveCast = async () => {
+        setIsLoadingCast(true);
+        setCastError(null);
+        try {
+          // Add a cache buster timestamp to always fetch newest spreadsheet edits
+          const res = await fetch(`${CAST_CSV_URL}&t=${Date.now()}`);
+          if (!res.ok) throw new Error("Could not fetch Google Sheet data.");
+          const text = await res.text();
+          const parsed = parseCSV(text);
+          if (parsed.length > 0) {
+            setCastList(parsed);
+          } else {
+            setCastError("Spreadsheet returned no rows yet.");
+          }
+        } catch (err) {
+          console.error(err);
+          setCastError("Could not connect to Google Sheet. Check network connection or publish settings.");
+        } finally {
+          setIsLoadingCast(false);
+        }
+      };
+
+      useEffect(() => {
+        loadLiveCast();
+      }, []);
 
       useEffect(() => {
         localStorage.setItem('frozen_rehearsals', JSON.stringify(rehearsals));
@@ -381,6 +463,17 @@
         });
       }, [rehearsals, callSearchRole]);
 
+      const filteredCast = useMemo(() => {
+        if (!castFilterQuery.trim()) return castList;
+        const q = castFilterQuery.toLowerCase();
+        return castList.filter(item => 
+          item.role.toLowerCase().includes(q) ||
+          item.castSnow.toLowerCase().includes(q) ||
+          item.castIce.toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q)
+        );
+      }, [castList, castFilterQuery]);
+
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
           {/* Header Banner */}
@@ -397,7 +490,7 @@
                   FROZEN JR.
                 </h1>
                 <p className="text-xs md:text-sm text-cyan-200/70">
-                  Rehearsal Call Board • Tracks • Snow & Ice Double Cast Hub
+                  Rehearsal Call Board • Tracks • Live Snow & Ice Cast Roster
                 </p>
               </div>
             </div>
@@ -458,7 +551,7 @@
                   <div className="relative">
                     <input 
                       type="text"
-                      placeholder="Filter by your role (e.g., Olaf, Anna, Snow Cast, Ensemble)..."
+                      placeholder="Filter by your role (e.g., Olaf, Anna, Snow Cast, Chorus)..."
                       value={callSearchRole}
                       onChange={(e) => setCallSearchRole(e.target.value)}
                       className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
@@ -603,24 +696,65 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: DOUBLE CAST LIST (SNOW CAST & ICE CAST)           */}
+          {/* TAB 2: LIVE GOOGLE SHEET CAST LIST (SNOW & ICE CAST)     */}
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
-              <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold font-cinzel text-white">Frozen JR. Cast Roster</h2>
-                  <p className="text-xs text-slate-400">Double cast breakdown for Snow Cast and Ice Cast performances</p>
+              {/* Sync Status Banner */}
+              <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-cyan-400">
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl shrink-0">📊</div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      Live Cast Roster Synchronized
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      Directly powered by your Google Sheet. Chorus & Ensemble members perform in both casts.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-cyan-900/60">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={loadLiveCast}
+                    disabled={isLoadingCast}
+                    className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-3 py-1.5 rounded-xl border border-cyan-800 flex items-center gap-1.5 transition disabled:opacity-50"
+                  >
+                    <span className={isLoadingCast ? 'animate-spin' : ''}>↻</span>
+                    <span>{isLoadingCast ? 'Fetching...' : 'Refresh Cast'}</span>
+                  </button>
+                  <a
+                    href="https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pubhtml?gid=1788082919&single=true"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-slate-400 hover:text-white underline px-1"
+                  >
+                    View Sheet ↗
+                  </a>
+                </div>
+              </div>
+
+              {/* Cast Selector & Search Filter */}
+              <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="w-full md:w-72">
+                  <input
+                    type="text"
+                    placeholder="Search actor or character..."
+                    value={castFilterQuery}
+                    onChange={(e) => setCastFilterQuery(e.target.value)}
+                    className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-3.5 py-2 text-xs text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-cyan-900/60 shrink-0">
                   <button
                     onClick={() => setSelectedCastGroup('ALL')}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
                       selectedCastGroup === 'ALL' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    Both Casts
+                    Both Casts ({castList.length})
                   </button>
                   <button
                     onClick={() => setSelectedCastGroup('SNOW')}
@@ -641,51 +775,83 @@
                 </div>
               </div>
 
-              <div className="glass-card rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-900/90 text-cyan-300 text-xs uppercase font-cinzel tracking-wider border-b border-cyan-900/50">
-                      <tr>
-                        <th className="py-3.5 px-4">Role / Character</th>
-                        <th className="py-3.5 px-4">Tier</th>
-                        {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SNOW') && (
-                          <th className="py-3.5 px-4 text-sky-300 font-extrabold tracking-wide">🌨️ Snow Cast</th>
-                        )}
-                        {(selectedCastGroup === 'ALL' || selectedCastGroup === 'ICE') && (
-                          <th className="py-3.5 px-4 text-indigo-300 font-extrabold tracking-wide">🧊 Ice Cast</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-sans">
-                      {CAST_MEMBERS.map((member, idx) => (
-                        <tr key={idx} className="hover:bg-slate-800/40 transition">
-                          <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
-                            <span>❄️</span> {member.role}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                              member.category === 'Lead' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
-                              member.category === 'Principal' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
-                              'bg-slate-800 text-slate-300'
-                            }`}>
-                              {member.category}
-                            </span>
-                          </td>
+              {/* Live Cast Table */}
+              <div className="glass-card rounded-2xl overflow-hidden shadow-2xl">
+                {isLoadingCast && castList.length === 0 ? (
+                  <div className="p-12 text-center text-cyan-300">
+                    <div className="text-4xl animate-bounce mb-3">❄️</div>
+                    <p className="font-cinzel text-lg">Fetching Latest Cast From Google Sheets...</p>
+                  </div>
+                ) : castError && castList.length === 0 ? (
+                  <div className="p-8 text-center text-amber-300">
+                    <p className="font-bold">{castError}</p>
+                    <button onClick={loadLiveCast} className="mt-3 bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs">
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-900/90 text-cyan-300 text-xs uppercase font-cinzel tracking-wider border-b border-cyan-900/50">
+                        <tr>
+                          <th className="py-3.5 px-4">Role / Character</th>
+                          <th className="py-3.5 px-4">Category</th>
                           {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SNOW') && (
-                            <td className="py-3 px-4 font-semibold text-slate-200">
-                              {member.castSnow}
-                            </td>
+                            <th className="py-3.5 px-4 text-sky-300 font-extrabold tracking-wide">🌨️ Snow Cast</th>
                           )}
                           {(selectedCastGroup === 'ALL' || selectedCastGroup === 'ICE') && (
-                            <td className="py-3 px-4 font-semibold text-slate-200">
-                              {member.castIce}
-                            </td>
+                            <th className="py-3.5 px-4 text-indigo-300 font-extrabold tracking-wide">🧊 Ice Cast</th>
                           )}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-sans">
+                        {filteredCast.map((member) => (
+                          <tr 
+                            key={member.id} 
+                            className={member.isChorus ? 'bg-cyan-950/20 hover:bg-cyan-950/40 transition' : 'hover:bg-slate-800/40 transition'}
+                          >
+                            <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
+                              <span>{member.isChorus ? '❄️' : '🎭'}</span> 
+                              <span>{member.role}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                                member.category.toLowerCase().includes('lead') ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
+                                member.category.toLowerCase().includes('principal') ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                                member.isChorus ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                'bg-slate-800 text-slate-300'
+                              }`}>
+                                {member.category || 'Cast'}
+                              </span>
+                            </td>
+                            {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SNOW') && (
+                              <td className="py-3 px-4 font-semibold text-slate-200">
+                                {member.isChorus ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
+                                    <span>✨</span> {member.castSnow || 'In Both Casts'}
+                                  </span>
+                                ) : (
+                                  <span>{member.castSnow}</span>
+                                )}
+                              </td>
+                            )}
+                            {(selectedCastGroup === 'ALL' || selectedCastGroup === 'ICE') && (
+                              <td className="py-3 px-4 font-semibold text-slate-200">
+                                {member.isChorus ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
+                                    <span>✨</span> {member.castIce || 'In Both Casts'}
+                                  </span>
+                                ) : (
+                                  <span>{member.castIce}</span>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1073,30 +1239,9 @@
                       required
                       value={editCallData.calledRoles}
                       onChange={(e) => setEditCallData({...editCallData, calledRoles: e.target.value})}
-                      placeholder="e.g., Elsa, Anna, Olaf, Kristoff, Snow Cast"
+                      placeholder="e.g., Elsa, Anna, Olaf, Kristoff, Snow Cast, All Chorus"
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white mb-2"
                     />
-                    <div className="flex flex-wrap gap-1">
-                      <span className="text-[10px] text-slate-400 py-0.5">Quick Add:</span>
-                      {QUICK_ROLES.map(qr => (
-                        <button
-                          key={qr}
-                          type="button"
-                          onClick={() => {
-                            const cur = editCallData.calledRoles ? editCallData.calledRoles.split(',').map(s=>s.trim()) : [];
-                            if (!cur.includes(qr)) {
-                              setEditCallData({
-                                ...editCallData,
-                                calledRoles: cur.length ? `${editCallData.calledRoles}, ${qr}` : qr
-                              });
-                            }
-                          }}
-                          className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] px-2 py-0.5 rounded border border-slate-700"
-                        >
-                          +{qr}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
                   <div>
@@ -1143,7 +1288,7 @@
 
           <footer className="mt-12 text-center text-xs text-slate-500 border-t border-slate-800/80 pt-6">
             <p>Frozen JR. • Community Youth Theater Production Portal</p>
-            <p className="mt-1">Snow Cast & Ice Cast Schedules • Audio via Google Drive • Choreography via YouTube</p>
+            <p className="mt-1">Live Google Sheet Cast Sync • Snow & Ice Schedules • Google Drive Audio • YouTube Vault</p>
           </footer>
         </div>
       );
