@@ -82,7 +82,7 @@
       return url;
     }
 
-    // Helper: Robust CSV Line Parser (handles quotes and commas)
+    // Helper: Robust CSV Parser with Automatic Header Discard
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
@@ -106,25 +106,36 @@
         return result;
       }
 
-      const rawHeaders = parseRow(lines[0]);
-      const headers = rawHeaders.map(h => h.toLowerCase());
+      const rows = lines.map(parseRow);
+      if (rows.length === 0) return [];
 
-      // Fuzzy column finder
-      const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
-      const snowIdx = headers.findIndex(h => h.includes('snow') || h.includes('cast a') || h.includes('cast 1'));
-      const iceIdx = headers.findIndex(h => h.includes('ice') || h.includes('cast b') || h.includes('cast 2'));
-      const catIdx = headers.findIndex(h => h.includes('category') || h.includes('type') || h.includes('group') || h.includes('tier'));
-      const actorIdx = headers.findIndex(h => h.includes('actor') || h.includes('name') || h.includes('member'));
+      // Detect header row based on content
+      const firstRowLower = rows[0].map(h => (h || '').toLowerCase());
+      const roleIdx = firstRowLower.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
+      const snowIdx = firstRowLower.findIndex(h => h.includes('snow') || h.includes('cast a') || h.includes('cast 1'));
+      const iceIdx = firstRowLower.findIndex(h => h.includes('ice') || h.includes('cast b') || h.includes('cast 2'));
+      const catIdx = firstRowLower.findIndex(h => h.includes('category') || h.includes('type') || h.includes('group') || h.includes('tier'));
 
-      return lines.slice(1).map((line, rowIdx) => {
-        const cols = parseRow(line);
-        const role = (roleIdx !== -1 ? cols[roleIdx] : cols[0]) || `Role #${rowIdx + 1}`;
-        
-        let castSnow = snowIdx !== -1 ? cols[snowIdx] : (actorIdx !== -1 ? cols[actorIdx] : cols[1] || 'TBD');
-        let castIce = iceIdx !== -1 ? cols[iceIdx] : cols[2] || castSnow || 'TBD';
+      // Skip row 0 if it contains "snow" or "ice" or "role"
+      const dataRows = (snowIdx !== -1 || iceIdx !== -1 || roleIdx !== -1) ? rows.slice(1) : rows;
+
+      const effectiveRoleCol = roleIdx !== -1 ? roleIdx : 0;
+      const effectiveSnowCol = snowIdx !== -1 ? snowIdx : 1;
+      const effectiveIceCol = iceIdx !== -1 ? iceIdx : 2;
+
+      return dataRows.filter(cols => {
+        const valA = (cols[effectiveRoleCol] || '').toLowerCase().trim();
+        const valB = (cols[effectiveSnowCol] || '').toLowerCase().trim();
+        if (!valA && !valB) return false;
+        // Purge any lingering header duplicate
+        if (valB === 'snow cast' || valB === 'snow' || valA === 'role' || valA === 'character') return false;
+        return true;
+      }).map((cols, rowIdx) => {
+        const role = cols[effectiveRoleCol] || `Character ${rowIdx + 1}`;
+        let castSnow = cols[effectiveSnowCol] || 'TBD';
+        let castIce = cols[effectiveIceCol] || castSnow || 'TBD';
         let category = catIdx !== -1 ? cols[catIdx] : '';
 
-        // Auto determine category if empty
         const lowerRole = role.toLowerCase();
         if (!category) {
           if (lowerRole.includes('chorus') || lowerRole.includes('ensemble') || lowerRole.includes('towns') || lowerRole.includes('hidden folk')) {
@@ -246,8 +257,24 @@
       }
     ];
 
+    const TAB_INFO = {
+      callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
+      cast: { label: 'Snow & Ice Cast List', icon: '🎭', path: 'cast' },
+      music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
+      videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
+      calendar: { label: 'Master Calendar', icon: '🗓️', path: 'calendar' }
+    };
+
     function ProductionApp() {
-      const [activeTab, setActiveTab] = useState('callboard');
+      // Initialize active tab from URL hash (e.g., #cast or #calendar)
+      const getInitialTab = () => {
+        const hash = window.location.hash.replace('#', '').toLowerCase();
+        return TAB_INFO[hash] ? hash : 'callboard';
+      };
+
+      const [activeTab, setActiveTab] = useState(getInitialTab);
+      const [copiedBreadcrumb, setCopiedBreadcrumb] = useState(false);
+
       const [isAdmin, setIsAdmin] = useState(false);
       const [showLoginModal, setShowLoginModal] = useState(false);
       const [adminPinInput, setAdminPinInput] = useState('');
@@ -295,12 +322,36 @@
         notes: ''
       });
 
+      // Synchronize URL Hash with Active Tab and Handle Browser Back/Forward
+      const navigateToTab = (tabId) => {
+        setActiveTab(tabId);
+        window.location.hash = tabId;
+      };
+
+      useEffect(() => {
+        const handleHashChange = () => {
+          const hash = window.location.hash.replace('#', '').toLowerCase();
+          if (TAB_INFO[hash]) {
+            setActiveTab(hash);
+          }
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+      }, []);
+
+      const copyCurrentBreadcrumbLink = () => {
+        const url = window.location.origin + window.location.pathname + '#' + activeTab;
+        navigator.clipboard.writeText(url).then(() => {
+          setCopiedBreadcrumb(true);
+          setTimeout(() => setCopiedBreadcrumb(false), 2000);
+        });
+      };
+
       // Fetch Live Cast from Google Sheets CSV
       const loadLiveCast = async () => {
         setIsLoadingCast(true);
         setCastError(null);
         try {
-          // Add a cache buster timestamp to always fetch newest spreadsheet edits
           const res = await fetch(`${CAST_CSV_URL}&t=${Date.now()}`);
           if (!res.ok) throw new Error("Could not fetch Google Sheet data.");
           const text = await res.text();
@@ -308,7 +359,7 @@
           if (parsed.length > 0) {
             setCastList(parsed);
           } else {
-            setCastError("Spreadsheet returned no rows yet.");
+            setCastError("Spreadsheet returned no data rows yet.");
           }
         } catch (err) {
           console.error(err);
@@ -477,7 +528,7 @@
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
           {/* Header Banner */}
-          <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-cyan-500/20 pb-6 mb-6">
+          <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-cyan-500/20 pb-6 mb-4">
             <div className="flex items-center gap-4 text-center md:text-left">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-600 to-sky-300 flex items-center justify-center text-white text-3xl shadow-lg shadow-cyan-500/30">
                 ❄️
@@ -517,28 +568,43 @@
             </div>
           </header>
 
+          {/* URL Breadcrumb Navigator Bar */}
+          <div className="flex items-center justify-between py-2 px-3 mb-4 rounded-xl bg-slate-950/60 border border-cyan-950 text-xs">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <span className="text-cyan-400">❄️ Frozen JR</span>
+              <span>/</span>
+              <span className="text-slate-300 font-semibold">{TAB_INFO[activeTab]?.icon} {TAB_INFO[activeTab]?.label}</span>
+              <span className="hidden sm:inline font-mono text-[11px] text-cyan-500/70">#{activeTab}</span>
+            </div>
+
+            <button
+              onClick={copyCurrentBreadcrumbLink}
+              className="flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-white bg-slate-900 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-cyan-900 transition"
+              title="Copy direct link to this page"
+            >
+              <span>{copiedBreadcrumb ? '✓ Copied Link!' : '🔗 Copy Direct Link'}</span>
+            </button>
+          </div>
+
           {/* Navigation Bar */}
           <nav className="flex flex-wrap items-center gap-2 mb-8 bg-slate-900/60 p-1.5 rounded-2xl border border-cyan-900/50 backdrop-blur-md">
-            {[
-              { id: 'callboard', label: 'Call Board & Schedule', icon: '📅' },
-              { id: 'cast', label: 'Snow & Ice Cast List', icon: '🎭' },
-              { id: 'music', label: 'Rehearsal Tracks', icon: '🎵' },
-              { id: 'videos', label: 'Choreography Vault', icon: '🎬' },
-              { id: 'calendar', label: 'Master Calendar', icon: '🗓️' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 flex-1 md:flex-initial text-center justify-center ${
-                  activeTab === tab.id
-                    ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-900/50'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
+            {Object.keys(TAB_INFO).map(key => {
+              const tab = TAB_INFO[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => navigateToTab(key)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 flex-1 md:flex-initial text-center justify-center ${
+                    activeTab === key
+                      ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-900/50'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* ======================================================== */}
