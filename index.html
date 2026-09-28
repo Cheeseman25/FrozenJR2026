@@ -68,38 +68,11 @@
 
     // --- Production Master Integrations ---
     const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
-    
-    // Live Google Sheet CSV Endpoint
     const CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
-
-    // Official Rehearsal Audio Playlist on YouTube
     const YOUTUBE_REHEARSAL_PLAYLIST_ID = "PLBDCgs4SWfnF2517NHRg4gLkayKkYssJb";
 
-    /*
-    // =========================================================================
-    // PRESERVED FOR FUTURE USE: GOOGLE DRIVE DIRECT AUDIO STREAMING HELPER
-    // =========================================================================
-    function formatDriveAudioUrl(url) {
-      if (!url) return '';
-      const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        return `https://drive.google.com/uc?export=download&id=${match[1]}`;
-      }
-      return url;
-    }
-
-    // Example Track Model for when Google Drive MP3 links are added:
-    const SHOWKIT_AUDIO_TRACKS_TEMPLATE = [
-      {
-        id: 'track-1',
-        title: '01. Prologue / Let the Sun Shine On',
-        artist: 'Company',
-        type: 'Vocal Track',
-        url: 'https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing'
-      }
-    ];
-    // =========================================================================
-    */
+    // Live Google Apps Script Web App Backend for Call Board
+    const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxGX1erfmlvxiGlnwqjwbg6HmWuYOpTvzsu7Gp0ZZBFA-lEl2DC9xEULfkr0_5ZITwb/exec";
 
     // Helper: Dynamic Single-Header CSV Parser
     function parseCSV(text) {
@@ -160,7 +133,14 @@
       }).filter(item => item.role.trim().length > 0 && item.role.toLowerCase() !== 'role');
     }
 
-    const INITIAL_REHEARSALS = [];
+    const INITIAL_CALL_TYPES = [
+      'Saturday Company (Full Cast)',
+      'Wednesday Partial Call',
+      'Principals Vocal Clinic',
+      'Choreography Blocking',
+      'Music & Harmonies',
+      'Tech / Dress Rehearsal'
+    ];
 
     const TAB_INFO = {
       callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
@@ -192,90 +172,25 @@
       const [selectedCastGroup, setSelectedCastGroup] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
+      // Call Types (with write-ins saved)
+      const [callTypes, setCallTypes] = useState(() => {
+        const saved = localStorage.getItem('frozen_call_types');
+        return saved ? JSON.parse(saved) : INITIAL_CALL_TYPES;
+      });
+
+      // Rehearsals State (loaded from localStorage first, then synchronized with Google Apps Script)
       const [rehearsals, setRehearsals] = useState(() => {
         const saved = localStorage.getItem('frozen_rehearsals');
-        return saved ? JSON.parse(saved) : INITIAL_REHEARSALS;
+        return saved ? JSON.parse(saved) : [];
+      });
+      const [isSyncingBackend, setIsSyncingBackend] = useState(false);
+      const [backendUrl, setBackendUrl] = useState(() => {
+        return localStorage.getItem('frozen_backend_url') || CALLBOARD_BACKEND_URL;
       });
 
       const [callSearchRole, setCallSearchRole] = useState('');
 
-      /*
-      // =========================================================================
-      // PRESERVED FOR FUTURE USE: AUDIO PLAYER ENGINE STATE
-      // =========================================================================
-      const [tracks, setTracks] = useState(() => {
-        const saved = localStorage.getItem('frozen_tracks');
-        return saved ? JSON.parse(saved) : [];
-      });
-      const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-      const [isPlaying, setIsPlaying] = useState(false);
-      const [audioDuration, setAudioDuration] = useState(0);
-      const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-      const [playbackRate, setPlaybackRate] = useState(1.0);
-      const audioRef = useRef(new Audio());
-
-      useEffect(() => {
-        if (tracks.length === 0) return;
-        const audio = audioRef.current;
-        const currentTrack = tracks[currentTrackIndex];
-        if (!currentTrack) return;
-
-        audio.src = formatDriveAudioUrl(currentTrack.url);
-        audio.playbackRate = playbackRate;
-
-        const onTimeUpdate = () => setAudioCurrentTime(audio.currentTime);
-        const onLoadedMeta = () => setAudioDuration(audio.duration || 0);
-        const onEnded = () => {
-          if (currentTrackIndex < tracks.length - 1) {
-            setCurrentTrackIndex(prev => prev + 1);
-          } else {
-            setIsPlaying(false);
-          }
-        };
-
-        audio.addEventListener('timeupdate', onTimeUpdate);
-        audio.addEventListener('loadedmetadata', onLoadedMeta);
-        audio.addEventListener('ended', onEnded);
-        if (isPlaying) audio.play().catch(e => console.log('Blocked', e));
-
-        return () => {
-          audio.removeEventListener('timeupdate', onTimeUpdate);
-          audio.removeEventListener('loadedmetadata', onLoadedMeta);
-          audio.removeEventListener('ended', onEnded);
-        };
-      }, [currentTrackIndex, tracks]);
-
-      const togglePlay = () => {
-        if (tracks.length === 0) return;
-        if (isPlaying) {
-          audioRef.current.pause();
-          setIsPlaying(false);
-        } else {
-          audioRef.current.play().then(() => setIsPlaying(true));
-        }
-      };
-
-      const handleSeek = (e) => {
-        const time = Number(e.target.value);
-        audioRef.current.currentTime = time;
-        setAudioCurrentTime(time);
-      };
-
-      const changeRate = (rate) => {
-        setPlaybackRate(rate);
-        audioRef.current.playbackRate = rate;
-      };
-
-      const formatTime = (secs) => {
-        if (isNaN(secs)) return '0:00';
-        const mins = Math.floor(secs / 60);
-        const s = Math.floor(secs % 60);
-        return `${mins}:${s < 10 ? '0' : ''}${s}`;
-      };
-      // =========================================================================
-      */
-
-      // Admin Form State for Rehearsal Notices
+      // Admin Modal State
       const [isEditingCall, setIsEditingCall] = useState(false);
       const [editCallData, setEditCallData] = useState({
         id: '',
@@ -283,11 +198,13 @@
         date: '',
         time: '',
         location: '',
-        type: 'Partial Call',
-        calledRoles: '',
+        type: 'Wednesday Partial Call',
+        customType: '',
+        calledRoles: [],
         focusScenes: '',
         notes: ''
       });
+      const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
 
       const navigateToTab = (tabId) => {
         setActiveTab(tabId);
@@ -335,13 +252,41 @@
         }
       };
 
+      // Fetch Live Rehearsals from Google Sheet Backend
+      const fetchBackendRehearsals = async () => {
+        if (!backendUrl) return;
+        setIsSyncingBackend(true);
+        try {
+          const res = await fetch(backendUrl);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const formatted = data.map(item => ({
+              ...item,
+              calledRoles: typeof item.calledRoles === 'string' ? item.calledRoles.split(',').map(s=>s.trim()).filter(Boolean) : (item.calledRoles || []),
+              focusScenes: typeof item.focusScenes === 'string' ? item.focusScenes.split(',').map(s=>s.trim()).filter(Boolean) : (item.focusScenes || [])
+            }));
+            setRehearsals(formatted);
+            localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
+          }
+        } catch (e) {
+          console.log('Backend sync offline, using local storage.');
+        } finally {
+          setIsSyncingBackend(false);
+        }
+      };
+
       useEffect(() => {
         loadLiveCast();
-      }, []);
+        fetchBackendRehearsals();
+      }, [backendUrl]);
 
       useEffect(() => {
         localStorage.setItem('frozen_rehearsals', JSON.stringify(rehearsals));
       }, [rehearsals]);
+
+      useEffect(() => {
+        localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
+      }, [callTypes]);
 
       const handleLogin = (e) => {
         e.preventDefault();
@@ -362,19 +307,70 @@
           date: new Date().toISOString().split('T')[0],
           time: '',
           location: '',
-          type: 'Partial Call',
-          calledRoles: '',
+          type: callTypes[0] || 'Wednesday Partial Call',
+          customType: '',
+          calledRoles: [],
           focusScenes: '',
           notes: ''
         });
+        setIsCustomTypeMode(false);
         setIsEditingCall(true);
       };
 
-      const saveCall = (e) => {
+      const openEditCall = (reh) => {
+        setEditCallData({
+          ...reh,
+          customType: '',
+          calledRoles: Array.isArray(reh.calledRoles) ? reh.calledRoles : (reh.calledRoles ? [reh.calledRoles] : []),
+          focusScenes: Array.isArray(reh.focusScenes) ? reh.focusScenes.join(', ') : (reh.focusScenes || '')
+        });
+        setIsCustomTypeMode(!callTypes.includes(reh.type));
+        setIsEditingCall(true);
+      };
+
+      // Toggle multi-select roles
+      const toggleCalledRole = (roleTag) => {
+        const cur = [...editCallData.calledRoles];
+        const idx = cur.indexOf(roleTag);
+        if (idx > -1) {
+          cur.splice(idx, 1);
+        } else {
+          cur.push(roleTag);
+        }
+        setEditCallData({ ...editCallData, calledRoles: cur });
+      };
+
+      // Batch role selectors
+      const selectAllGroup = (groupType) => {
+        let tags = [];
+        if (groupType === 'ALL_SNOW') {
+          tags = castList.map(c => c.isChorus ? `${c.role} (Both Casts)` : `${c.role} (Snow Cast)`);
+        } else if (groupType === 'ALL_ICE') {
+          tags = castList.map(c => c.isChorus ? `${c.role} (Both Casts)` : `${c.role} (Ice Cast)`);
+        } else if (groupType === 'FULL_COMPANY') {
+          tags = ['Full Cast & Company (All Members)'];
+        } else if (groupType === 'ALL_CHORUS') {
+          tags = castList.filter(c => c.isChorus).map(c => `${c.role} (Both Casts)`);
+        }
+        const merged = Array.from(new Set([...editCallData.calledRoles, ...tags]));
+        setEditCallData({ ...editCallData, calledRoles: merged });
+      };
+
+      const clearAllRoles = () => {
+        setEditCallData({ ...editCallData, calledRoles: [] });
+      };
+
+      // Save rehearsal call & post to backend
+      const saveCall = async (e) => {
         e.preventDefault();
-        const roleArray = typeof editCallData.calledRoles === 'string'
-          ? editCallData.calledRoles.split(',').map(s => s.trim()).filter(Boolean)
-          : editCallData.calledRoles;
+
+        let finalType = editCallData.type;
+        if (isCustomTypeMode && editCallData.customType.trim()) {
+          finalType = editCallData.customType.trim();
+          if (!callTypes.includes(finalType)) {
+            setCallTypes(prev => [...prev, finalType]);
+          }
+        }
 
         const sceneArray = typeof editCallData.focusScenes === 'string'
           ? editCallData.focusScenes.split(',').map(s => s.trim()).filter(Boolean)
@@ -382,25 +378,57 @@
 
         const newEntry = {
           ...editCallData,
-          calledRoles: roleArray,
+          type: finalType,
+          calledRoles: editCallData.calledRoles,
           focusScenes: sceneArray
         };
 
         const existingIndex = rehearsals.findIndex(r => r.id === newEntry.id);
+        let updated = [];
         if (existingIndex > -1) {
-          const updated = [...rehearsals];
+          updated = [...rehearsals];
           updated[existingIndex] = newEntry;
-          setRehearsals(updated);
         } else {
-          const updated = [...rehearsals, newEntry].sort((a, b) => new Date(a.date) - new Date(b.date));
-          setRehearsals(updated);
+          updated = [...rehearsals, newEntry].sort((a, b) => new Date(a.date) - new Date(b.date));
         }
+
+        setRehearsals(updated);
+        localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
         setIsEditingCall(false);
+
+        // Async write to Google Sheet Apps Script backend
+        if (backendUrl) {
+          try {
+            await fetch(backendUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'save', item: newEntry })
+            });
+          } catch (err) {
+            console.error('Error posting to Google Sheet backend', err);
+          }
+        }
       };
 
-      const deleteCall = (id) => {
+      const deleteCall = async (id) => {
         if (confirm("Delete this rehearsal call notice?")) {
-          setRehearsals(rehearsals.filter(r => r.id !== id));
+          const updated = rehearsals.filter(r => r.id !== id);
+          setRehearsals(updated);
+          localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
+
+          if (backendUrl) {
+            try {
+              await fetch(backendUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', id })
+              });
+            } catch (err) {
+              console.error('Error sending delete to backend', err);
+            }
+          }
         }
       };
 
@@ -408,7 +436,7 @@
         if (!callSearchRole.trim()) return rehearsals;
         const query = callSearchRole.toLowerCase();
         return rehearsals.filter(r => {
-          const inRoles = Array.isArray(r.calledRoles) && r.calledRoles.some(role => role.toLowerCase().includes(query) || role.toLowerCase() === 'full cast');
+          const inRoles = Array.isArray(r.calledRoles) && r.calledRoles.some(role => role.toLowerCase().includes(query) || role.toLowerCase().includes('full cast') || role.toLowerCase().includes('company'));
           const inTitle = r.title && r.title.toLowerCase().includes(query);
           return inRoles || inTitle;
         });
@@ -517,7 +545,7 @@
                   <div className="relative">
                     <input 
                       type="text"
-                      placeholder="Filter by your role (e.g., Olaf, Anna, Snow Cast, Chorus)..."
+                      placeholder="Filter by character or cast (e.g., Elsa, Snow Cast, Chorus)..."
                       value={callSearchRole}
                       onChange={(e) => setCallSearchRole(e.target.value)}
                       className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
@@ -530,13 +558,18 @@
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    💡 Tip: Wednesday call sheets are determined based on Saturday company rehearsals.
-                  </p>
+                  <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
+                    <span>💡 Wednesday calls target specific scenes based on Saturday notes.</span>
+                    {backendUrl && (
+                      <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                        ● Live Backend Active
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {isAdmin && (
-                  <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                     <button
                       onClick={openAddCall}
                       className="w-full md:w-auto bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm shadow-lg flex items-center justify-center gap-2 transition"
@@ -547,9 +580,11 @@
                 )}
               </div>
 
+              {/* Call Cards List */}
               <div className="grid gap-5">
                 {filteredRehearsals.map((reh) => {
-                  const isFullCast = reh.type === 'Full Cast' || (Array.isArray(reh.calledRoles) && reh.calledRoles.includes('Full Cast'));
+                  const isFullCast = (reh.type && reh.type.toLowerCase().includes('full cast')) || 
+                                     (Array.isArray(reh.calledRoles) && reh.calledRoles.some(r => r.toLowerCase().includes('full cast') || r.toLowerCase().includes('company')));
 
                   return (
                     <div 
@@ -593,32 +628,42 @@
 
                       <div className="grid md:grid-cols-2 gap-4 text-sm">
                         <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
-                          <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center gap-1.5">
-                            <span>👥</span> Called Cast & Characters:
+                          <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">👥 Called Roles & Casts:</span>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              {Array.isArray(reh.calledRoles) ? `${reh.calledRoles.length} called` : ''}
+                            </span>
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
                             {Array.isArray(reh.calledRoles) && reh.calledRoles.length > 0 ? (
-                              reh.calledRoles.map((role, i) => (
-                                <span 
-                                  key={i} 
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                    role === 'Full Cast'
-                                      ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30'
-                                      : 'bg-slate-800 text-sky-200 border border-slate-700'
-                                  }`}
-                                >
-                                  {role}
-                                </span>
-                              ))
+                              reh.calledRoles.map((roleTag, i) => {
+                                const isSnow = roleTag.includes('(Snow Cast)');
+                                const isIce = roleTag.includes('(Ice Cast)');
+                                const isBoth = roleTag.includes('(Both Casts)') || roleTag.includes('Full Cast') || roleTag.includes('Company');
+
+                                return (
+                                  <span 
+                                    key={i} 
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                                      isSnow ? 'bg-sky-950/80 text-sky-200 border-sky-800' :
+                                      isIce ? 'bg-indigo-950/80 text-indigo-200 border-indigo-800' :
+                                      isBoth ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40' :
+                                      'bg-slate-800 text-slate-200 border-slate-700'
+                                    }`}
+                                  >
+                                    {roleTag}
+                                  </span>
+                                );
+                              })
                             ) : (
-                              <span className="text-slate-400 italic text-xs">No specific roles listed.</span>
+                              <span className="text-slate-400 italic text-xs">No specific roles selected.</span>
                             )}
                           </div>
                         </div>
 
                         <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
                           <div className="text-xs uppercase tracking-wider text-amber-400 font-bold mb-2 flex items-center gap-1.5">
-                            <span>🎭</span> Working Scenes & Songs:
+                            <span>🎭</span> Working Scenes & Music:
                           </div>
                           {Array.isArray(reh.focusScenes) && reh.focusScenes.length > 0 ? (
                             <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
@@ -627,7 +672,7 @@
                               ))}
                             </ul>
                           ) : (
-                            <span className="text-slate-400 italic text-xs">No specific scenes listed.</span>
+                            <span className="text-slate-400 italic text-xs">General rehearsal / blocking.</span>
                           )}
                         </div>
                       </div>
@@ -642,14 +687,7 @@
                       {isAdmin && (
                         <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-end gap-3 text-xs">
                           <button
-                            onClick={() => {
-                              setEditCallData({
-                                ...reh,
-                                calledRoles: Array.isArray(reh.calledRoles) ? reh.calledRoles.join(', ') : (reh.calledRoles || ''),
-                                focusScenes: Array.isArray(reh.focusScenes) ? reh.focusScenes.join(', ') : (reh.focusScenes || '')
-                              });
-                              setIsEditingCall(true);
-                            }}
+                            onClick={() => openEditCall(reh)}
                             className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
                             ✏️ Edit Call
                           </button>
@@ -669,7 +707,7 @@
                     <div className="text-4xl mb-3">📋</div>
                     <h4 className="text-lg font-bold font-cinzel text-white">No Active Rehearsal Calls</h4>
                     <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                      Check back after Saturday run-throughs when Wednesday targeted calls and tech updates are posted by the production team.
+                      Check back after Saturday rehearsals when targeted Wednesday calls are published by the director and stage management.
                     </p>
                     {isAdmin && (
                       <button
@@ -690,7 +728,6 @@
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
-              {/* Sync Status Banner */}
               <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-cyan-400">
                 <div className="flex items-center gap-3">
                   <div className="text-2xl shrink-0">📊</div>
@@ -717,7 +754,6 @@
                 </div>
               </div>
 
-              {/* Cast Selector & Search Filter */}
               <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="w-full md:w-72">
                   <input
@@ -757,7 +793,6 @@
                 </div>
               </div>
 
-              {/* Live Cast Table */}
               <div className="glass-card rounded-2xl overflow-hidden shadow-2xl">
                 {isLoadingCast && castList.length === 0 ? (
                   <div className="p-12 text-center text-cyan-300">
@@ -866,7 +901,6 @@
                 </a>
               </div>
 
-              {/* Embedded YouTube Rehearsal Tracks Playlist */}
               <div className="glass-card rounded-3xl overflow-hidden p-3 md:p-5 border border-cyan-500/20 shadow-2xl">
                 <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
                   <iframe
@@ -882,30 +916,6 @@
                   <span>🎵 Click the playlist menu icon in the top-right corner of the video window to jump to specific songs or instrumental tracks.</span>
                 </div>
               </div>
-
-              {/*
-              =========================================================================
-              PRESERVED CODE: NATIVE MP3 / GOOGLE DRIVE AUDIO PLAYER UI (COMMENTED OUT)
-              =========================================================================
-              When your Google Drive ShowKit MP3 files are ready, this native player UI
-              can be restored to offer offline downloads, speed changes (0.8x/1.2x), and scrub bars:
-
-              <div className="glass-card glass-card-active p-6 rounded-3xl relative overflow-hidden">
-                <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
-                  <div className="w-28 h-28 rounded-2xl bg-gradient-to-tr from-cyan-600 via-sky-500 to-indigo-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-900/40 shrink-0">
-                    ❄️
-                  </div>
-                  <div className="flex-1 w-full text-center md:text-left">
-                    <span className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Now Rehearsing</span>
-                    <h3 className="text-2xl font-extrabold text-white font-cinzel mt-1">{tracks[currentTrackIndex]?.title}</h3>
-                    <div className="mt-4">
-                      <input type="range" min="0" max={audioDuration || 100} value={audioCurrentTime} onChange={handleSeek} className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              =========================================================================
-              */}
             </div>
           )}
 
@@ -1001,7 +1011,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* MODAL: ADMIN LOGIN                                       */}
+          {/* MODAL: ADMIN LOGIN & BACKEND CONFIG                      */}
           {/* ======================================================== */}
           {showLoginModal && (
             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1039,16 +1049,35 @@
                     Unlock Admin Tools
                   </button>
                 </form>
+
+                <div className="mt-5 pt-4 border-t border-slate-800 text-center">
+                  <details className="text-[11px] text-slate-400 text-left">
+                    <summary className="cursor-pointer hover:text-cyan-300 text-center">⚙️ Backend Web App Settings</summary>
+                    <div className="mt-2 space-y-2">
+                      <label className="block text-slate-300 font-bold">Google Apps Script Web App URL:</label>
+                      <input 
+                        type="url"
+                        placeholder="https://script.google.com/macros/s/.../exec"
+                        value={backendUrl}
+                        onChange={(e) => {
+                          setBackendUrl(e.target.value);
+                          localStorage.setItem('frozen_backend_url', e.target.value);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-[10px]"
+                      />
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
           )}
 
           {/* ======================================================== */}
-          {/* MODAL: POST / EDIT REHEARSAL CALL                        */}
+          {/* MODAL: POST / EDIT REHEARSAL CALL WITH ADVANCED PICKER   */}
           {/* ======================================================== */}
           {isEditingCall && (
             <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-              <div className="glass-card max-w-lg w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl my-8">
+              <div className="glass-card max-w-2xl w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl my-8">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-4">
                   <h3 className="text-lg font-bold font-cinzel text-white">
                     {editCallData.id ? 'Publish / Edit Rehearsal Call' : 'New Rehearsal Call'}
@@ -1069,7 +1098,7 @@
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-300 font-bold mb-1">Rehearsal Date</label>
                       <input 
@@ -1080,18 +1109,40 @@
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
                       />
                     </div>
+
+                    {/* CALL TYPE WITH WRITE-IN SUPPORT */}
                     <div>
-                      <label className="block text-slate-300 font-bold mb-1">Call Type</label>
-                      <select 
-                        value={editCallData.type}
-                        onChange={(e) => setEditCallData({...editCallData, type: e.target.value})}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
-                      >
-                        <option value="Partial Call">Wednesday / Partial Call</option>
-                        <option value="Full Cast">Saturday Company (Full Cast)</option>
-                        <option value="Tech / Dress">Tech / Dress Rehearsal</option>
-                        <option value="Principals Only">Principals Only</option>
-                      </select>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-300 font-bold">Call Type</label>
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomTypeMode(!isCustomTypeMode)}
+                          className="text-[11px] text-cyan-400 hover:underline"
+                        >
+                          {isCustomTypeMode ? "← Choose from list" : "+ Custom Call Type"}
+                        </button>
+                      </div>
+
+                      {isCustomTypeMode ? (
+                        <input
+                          type="text"
+                          required
+                          value={editCallData.customType}
+                          onChange={(e) => setEditCallData({...editCallData, customType: e.target.value})}
+                          placeholder="Type custom call category (e.g. Tap Intensive)"
+                          className="w-full bg-slate-900 border border-cyan-500 rounded-xl p-2.5 text-cyan-200 font-semibold"
+                        />
+                      ) : (
+                        <select 
+                          value={editCallData.type}
+                          onChange={(e) => setEditCallData({...editCallData, type: e.target.value})}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white font-medium"
+                        >
+                          {callTypes.map((type, idx) => (
+                            <option key={idx} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
 
@@ -1118,18 +1169,161 @@
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">
-                      Who is Called? <span className="font-normal text-slate-400">(Comma-separated roles)</span>
-                    </label>
-                    <input 
-                      type="text"
-                      required
-                      value={editCallData.calledRoles}
-                      onChange={(e) => setEditCallData({...editCallData, calledRoles: e.target.value})}
-                      placeholder="e.g., Elsa, Anna, Olaf, Kristoff, Snow Cast, All Chorus"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white mb-2"
-                    />
+                  {/* MULTI-SELECT CHARACTER LIST WITH GRANULAR CAST TOGGLES */}
+                  <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                      <div>
+                        <label className="block text-cyan-300 font-bold text-sm">Select Who is Called</label>
+                        <p className="text-[11px] text-slate-400">Choose both casts or individual casts per character</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => selectAllGroup('FULL_COMPANY')}
+                          className="bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-[10px] font-bold px-2 py-1 rounded border border-cyan-800"
+                        >
+                          + Full Company
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectAllGroup('ALL_SNOW')}
+                          className="bg-sky-950 hover:bg-sky-900 text-sky-300 text-[10px] font-bold px-2 py-1 rounded border border-sky-800"
+                        >
+                          + All Snow Cast
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectAllGroup('ALL_ICE')}
+                          className="bg-indigo-950 hover:bg-indigo-900 text-indigo-300 text-[10px] font-bold px-2 py-1 rounded border border-indigo-800"
+                        >
+                          + All Ice Cast
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectAllGroup('ALL_CHORUS')}
+                          className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded border border-emerald-800"
+                        >
+                          + All Chorus
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearAllRoles}
+                          className="text-red-400 hover:text-white text-[10px] font-bold px-1.5 py-1"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                      {castList.map((item) => {
+                        const snowTag = item.isChorus ? `${item.role} (Both Casts)` : `${item.role} (Snow Cast)`;
+                        const iceTag = item.isChorus ? `${item.role} (Both Casts)` : `${item.role} (Ice Cast)`;
+                        const bothTag = `${item.role} (Both Casts)`;
+
+                        const isSnowSelected = editCallData.calledRoles.includes(snowTag);
+                        const isIceSelected = editCallData.calledRoles.includes(iceTag);
+                        const isBothSelected = editCallData.calledRoles.includes(bothTag);
+
+                        return (
+                          <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700">
+                            <div>
+                              <span className="font-bold text-white text-xs">{item.role}</span>
+                              <span className="text-[10px] text-slate-400 ml-2">({item.category})</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {item.isChorus ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCalledRole(bothTag)}
+                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                    isBothSelected
+                                      ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                                      : 'bg-slate-800 text-emerald-300 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {isBothSelected ? '✓ Called (In Both Casts)' : '+ Call Chorus'}
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      let cur = [...editCallData.calledRoles];
+                                      if (isBothSelected) {
+                                        cur = cur.filter(t => t !== bothTag);
+                                      } else {
+                                        cur = cur.filter(t => t !== snowTag && t !== iceTag);
+                                        cur.push(bothTag);
+                                      }
+                                      setEditCallData({ ...editCallData, calledRoles: cur });
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                                      isBothSelected
+                                        ? 'bg-cyan-500 text-slate-950 font-black'
+                                        : 'bg-slate-800 text-cyan-300 hover:bg-slate-700'
+                                    }`}
+                                  >
+                                    Both
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      let cur = editCallData.calledRoles.filter(t => t !== bothTag);
+                                      if (cur.includes(snowTag)) {
+                                        cur = cur.filter(t => t !== snowTag);
+                                      } else {
+                                        cur.push(snowTag);
+                                      }
+                                      setEditCallData({ ...editCallData, calledRoles: cur });
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                                      isSnowSelected && !isBothSelected
+                                        ? 'bg-sky-500 text-slate-950 font-black'
+                                        : 'bg-slate-800 text-sky-300 hover:bg-slate-700'
+                                    }`}
+                                    title={item.castSnow ? `Snow Actor: ${item.castSnow}` : 'Snow Cast'}
+                                  >
+                                    🌨️ Snow ({item.castSnow || 'TBD'})
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      let cur = editCallData.calledRoles.filter(t => t !== bothTag);
+                                      if (cur.includes(iceTag)) {
+                                        cur = cur.filter(t => t !== iceTag);
+                                      } else {
+                                        cur.push(iceTag);
+                                      }
+                                      setEditCallData({ ...editCallData, calledRoles: cur });
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                                      isIceSelected && !isBothSelected
+                                        ? 'bg-indigo-500 text-slate-950 font-black'
+                                        : 'bg-slate-800 text-indigo-300 hover:bg-slate-700'
+                                    }`}
+                                    title={item.castIce ? `Ice Actor: ${item.castIce}` : 'Ice Cast'}
+                                  >
+                                    🧊 Ice ({item.castIce || 'TBD'})
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 text-xs">
+                      <span className="text-slate-400">Currently Called ({editCallData.calledRoles.length}): </span>
+                      <span className="text-cyan-200 font-semibold">
+                        {editCallData.calledRoles.length > 0 ? editCallData.calledRoles.join(', ') : 'None'}
+                      </span>
+                    </div>
                   </div>
 
                   <div>
@@ -1176,7 +1370,7 @@
 
           <footer className="mt-12 text-center text-xs text-slate-500 border-t border-slate-800/80 pt-6">
             <p>Frozen JR. • Community Youth Theater Production Portal</p>
-            <p className="mt-1">Live Cast Sync • Snow & Ice Schedules • Rehearsal Audio • Choreography Vault</p>
+            <p className="mt-1">Live Cast Sync • Multi-Cast Call Board • Master Calendar • YouTube Rehearsal Vault</p>
           </footer>
         </div>
       );
