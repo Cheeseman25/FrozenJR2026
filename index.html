@@ -71,8 +71,8 @@
     const CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
     const YOUTUBE_REHEARSAL_PLAYLIST_ID = "PLBDCgs4SWfnF2517NHRg4gLkayKkYssJb";
 
-    // Live Google Apps Script Web App Backend for Call Board
-    const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxGX1erfmlvxiGlnwqjwbg6HmWuYOpTvzsu7Gp0ZZBFA-lEl2DC9xEULfkr0_5ZITwb/exec";
+    // Live Google Apps Script Web App Backend URL
+    const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
     // Helper: Dynamic Single-Header CSV Parser
     function parseCSV(text) {
@@ -184,9 +184,7 @@
         return saved ? JSON.parse(saved) : [];
       });
       const [isSyncingBackend, setIsSyncingBackend] = useState(false);
-      const [backendUrl, setBackendUrl] = useState(() => {
-        return localStorage.getItem('frozen_backend_url') || CALLBOARD_BACKEND_URL;
-      });
+      const [backendStatus, setBackendStatus] = useState('Checking connection...');
 
       const [callSearchRole, setCallSearchRole] = useState('');
 
@@ -254,10 +252,10 @@
 
       // Fetch Live Rehearsals from Google Sheet Backend
       const fetchBackendRehearsals = async () => {
-        if (!backendUrl) return;
+        if (!CALLBOARD_BACKEND_URL) return;
         setIsSyncingBackend(true);
         try {
-          const res = await fetch(backendUrl);
+          const res = await fetch(`${CALLBOARD_BACKEND_URL}?t=${Date.now()}`);
           const data = await res.json();
           if (Array.isArray(data)) {
             const formatted = data.map(item => ({
@@ -267,9 +265,11 @@
             }));
             setRehearsals(formatted);
             localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
+            setBackendStatus('Connected to Google Sheet');
           }
         } catch (e) {
           console.log('Backend sync offline, using local storage.');
+          setBackendStatus('Offline / Local Storage Mode');
         } finally {
           setIsSyncingBackend(false);
         }
@@ -278,7 +278,7 @@
       useEffect(() => {
         loadLiveCast();
         fetchBackendRehearsals();
-      }, [backendUrl]);
+      }, []);
 
       useEffect(() => {
         localStorage.setItem('frozen_rehearsals', JSON.stringify(rehearsals));
@@ -328,7 +328,6 @@
         setIsEditingCall(true);
       };
 
-      // Toggle multi-select roles
       const toggleCalledRole = (roleTag) => {
         const cur = [...editCallData.calledRoles];
         const idx = cur.indexOf(roleTag);
@@ -340,7 +339,6 @@
         setEditCallData({ ...editCallData, calledRoles: cur });
       };
 
-      // Batch role selectors
       const selectAllGroup = (groupType) => {
         let tags = [];
         if (groupType === 'ALL_SNOW') {
@@ -360,7 +358,7 @@
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
 
-      // Save rehearsal call & post to backend
+      // Save rehearsal call & post to Google Sheet backend
       const saveCall = async (e) => {
         e.preventDefault();
 
@@ -396,15 +394,15 @@
         localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
         setIsEditingCall(false);
 
-        // Async write to Google Sheet Apps Script backend
-        if (backendUrl) {
+        // POST to Google Sheet Apps Script backend with text/plain to avoid preflight drops
+        if (CALLBOARD_BACKEND_URL) {
           try {
-            await fetch(backendUrl, {
+            await fetch(CALLBOARD_BACKEND_URL, {
               method: 'POST',
-              mode: 'no-cors',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
               body: JSON.stringify({ action: 'save', item: newEntry })
             });
+            console.log('Successfully saved to Google Sheet database.');
           } catch (err) {
             console.error('Error posting to Google Sheet backend', err);
           }
@@ -417,12 +415,11 @@
           setRehearsals(updated);
           localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
 
-          if (backendUrl) {
+          if (CALLBOARD_BACKEND_URL) {
             try {
-              await fetch(backendUrl, {
+              await fetch(CALLBOARD_BACKEND_URL, {
                 method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({ action: 'delete', id })
               });
             } catch (err) {
@@ -560,11 +557,9 @@
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
                     <span>💡 Wednesday calls target specific scenes based on Saturday notes.</span>
-                    {backendUrl && (
-                      <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                        ● Live Backend Active
-                      </span>
-                    )}
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                      ● {backendStatus}
+                    </span>
                   </div>
                 </div>
 
@@ -1011,7 +1006,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* MODAL: ADMIN LOGIN & BACKEND CONFIG                      */}
+          {/* MODAL: ADMIN LOGIN                                       */}
           {/* ======================================================== */}
           {showLoginModal && (
             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1049,25 +1044,6 @@
                     Unlock Admin Tools
                   </button>
                 </form>
-
-                <div className="mt-5 pt-4 border-t border-slate-800 text-center">
-                  <details className="text-[11px] text-slate-400 text-left">
-                    <summary className="cursor-pointer hover:text-cyan-300 text-center">⚙️ Backend Web App Settings</summary>
-                    <div className="mt-2 space-y-2">
-                      <label className="block text-slate-300 font-bold">Google Apps Script Web App URL:</label>
-                      <input 
-                        type="url"
-                        placeholder="https://script.google.com/macros/s/.../exec"
-                        value={backendUrl}
-                        onChange={(e) => {
-                          setBackendUrl(e.target.value);
-                          localStorage.setItem('frozen_backend_url', e.target.value);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-[10px]"
-                      />
-                    </div>
-                  </details>
-                </div>
               </div>
             </div>
           )}
@@ -1110,7 +1086,6 @@
                       />
                     </div>
 
-                    {/* CALL TYPE WITH WRITE-IN SUPPORT */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-slate-300 font-bold">Call Type</label>
