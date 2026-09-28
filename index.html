@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frozen JR. Production Portal & Call Board</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            frozen: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              800: '#075985',
+              900: '#0c4a6e',
+              950: '#082f49',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 & Babel for Browser Execution -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap');
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: radial-gradient(circle at 50% 0%, #0c4a6e 0%, #031828 100%);
+      color: #f1f5f9;
+      min-height: 100vh;
+    }
+    .font-cinzel { font-family: 'Cinzel', serif; }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .glass-card-active {
+      border-color: rgba(56, 189, 248, 0.55);
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #082f49; }
+    ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+  </style>
+</head>
+<body class="selection:bg-cyan-500 selection:text-white pb-20">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // --- Helper: Convert Google Drive Share Link to Direct Streamable URL ---
+    function formatDriveAudioUrl(url) {
+      if (!url) return '';
+      const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+      }
+      return url;
+    }
+
+    // --- Production Master Data ---
+    const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
+
+    const INITIAL_REHEARSALS = [
+      {
+        id: 'reh-1',
+        title: 'Saturday Company Rehearsal (Full Cast)',
+        date: '2026-10-03',
+        time: '9:00 AM - 1:00 PM',
+        location: 'Main Auditorium / Stage',
+        calledRoles: ['Full Cast', 'All Ensemble', 'Snow Chorus'],
+        focusScenes: ['Prologue', 'Fixer Upper (All)', 'Finale Act 2'],
+        notes: 'Bring dance shoes, rehearsal script, labeled water bottle. Saturday run-throughs decide Wednesday break-outs.',
+        type: 'Full Cast'
+      },
+      {
+        id: 'reh-2',
+        title: 'Wednesday Vocal & Staging Clinic',
+        date: '2026-10-07',
+        time: '5:30 PM - 8:00 PM',
+        location: 'Rehearsal Hall B & Stage',
+        calledRoles: ['Elsa', 'Anna', 'Kristoff', 'Olaf', 'Sven', 'Hans'],
+        focusScenes: ['Scene 4: "In Summer"', 'Scene 7: "Love Is An Open Door"', 'Scene 9: "For The First Time (Reprise)"'],
+        notes: 'Principals only. Review harmonies from Saturday session.',
+        type: 'Partial Call'
+      },
+      {
+        id: 'reh-3',
+        title: 'Saturday Act 1 Full Staging & Choreography',
+        date: '2026-10-10',
+        time: '9:00 AM - 1:30 PM',
+        location: 'Main Stage',
+        calledRoles: ['Full Cast'],
+        focusScenes: ['Act 1 Complete Run'],
+        notes: 'Full run-through of Act 1 without stopping. Line-notes following run.',
+        type: 'Full Cast'
+      }
+    ];
+
+    const CAST_MEMBERS = [
+      { role: 'Elsa', castSnow: 'Avery S.', castIce: 'Lilly M.', category: 'Lead' },
+      { role: 'Anna', castSnow: 'Cecilia R.', castIce: 'Elena V.', category: 'Lead' },
+      { role: 'Kristoff', castSnow: 'Noah P.', castIce: 'Noah P.', category: 'Principal' },
+      { role: 'Olaf', castSnow: 'Liam W.', castIce: 'Lucas B.', category: 'Principal' },
+      { role: 'Hans', castSnow: 'Jackson T.', castIce: 'Mason D.', category: 'Principal' },
+      { role: 'Sven', castSnow: 'Oliver C.', castIce: 'Oliver C.', category: 'Principal' },
+      { role: 'Young Elsa', castSnow: 'Maya G.', castIce: 'Charlotte K.', category: 'Featured' },
+      { role: 'Young Anna', castSnow: 'Harper B.', castIce: 'Chloe W.', category: 'Featured' },
+      { role: 'Middle Elsa', castSnow: 'Sophia L.', castIce: 'Emma R.', category: 'Featured' },
+      { role: 'Middle Anna', castSnow: 'Ava H.', castIce: 'Grace M.', category: 'Featured' },
+      { role: 'Oaken', castSnow: 'Ethan K.', castIce: 'Samuel J.', category: 'Featured' },
+      { role: 'King Agnarr', castSnow: 'Benjamin D.', castIce: 'Benjamin D.', category: 'Featured' },
+      { role: 'Queen Iduna', castSnow: 'Isabella C.', castIce: 'Isabella C.', category: 'Featured' },
+      { role: 'Pabbie & Bulda', castSnow: 'Caleb & Nora', castIce: 'Daniel & Zoey', category: 'Featured' },
+      { role: 'Townspeople & Hidden Folk', castSnow: 'Snow Ensemble', castIce: 'Ice Ensemble', category: 'Ensemble' },
+      { role: 'Snow Chorus / Dancers', castSnow: 'Snow Chorus', castIce: 'Ice Chorus', category: 'Ensemble' }
+    ];
+
+    const DEFAULT_AUDIO_TRACKS = [
+      {
+        id: 'track-1',
+        title: '01. Prologue / Let the Sun Shine On',
+        artist: 'Company',
+        type: 'Vocal Track',
+        url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=winter-magic-ambient-112290.mp3'
+      },
+      {
+        id: 'track-2',
+        title: '04. For the First Time in Forever',
+        artist: 'Anna, Elsa & Castle Staff',
+        type: 'Rehearsal Backing',
+        url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=orchestral-fantasy-heroic-10656.mp3'
+      },
+      {
+        id: 'track-3',
+        title: '07. In Summer',
+        artist: 'Olaf & Chorus',
+        type: 'Vocal Track',
+        url: 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_12b0c7443c.mp3?filename=happy-acoustic-guitar-waltz-1490.mp3'
+      },
+      {
+        id: 'track-4',
+        title: '09. Let It Go',
+        artist: 'Elsa & Snow Chorus',
+        type: 'Instrumental',
+        url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_24b4f535ea.mp3?filename=cinematic-epic-emotional-pack-110034.mp3'
+      }
+    ];
+
+    const CHOREO_VIDEOS = [
+      {
+        id: 'vid-1',
+        title: '"Fixer Upper" Dance Combinations',
+        scene: 'Act 2, Scene 4',
+        source: 'YouTube (Unlisted)',
+        videoId: 'kJQP7kiw5Fk',
+        notes: 'Watch the crossover footwork and troll partner spins starting at 0:45.'
+      },
+      {
+        id: 'vid-2',
+        title: '"Let The Sun Shine On" - Castle Staff Staging',
+        scene: 'Prologue / Scene 1',
+        source: 'YouTube (Unlisted)',
+        videoId: 'dQw4w9WgXcQ',
+        notes: 'Timing of the ribbon streamers and entrance blocks from Stage Left.'
+      },
+      {
+        id: 'vid-3',
+        title: '"Hygge" Dance Routine Breakdown',
+        scene: 'Act 2, Scene 1',
+        source: 'YouTube (Unlisted)',
+        videoId: 'L_LUpnjgPso',
+        notes: 'Sauna towel snap counts and kick line tempo.'
+      }
+    ];
+
+    function ProductionApp() {
+      const [activeTab, setActiveTab] = useState('callboard');
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [showLoginModal, setShowLoginModal] = useState(false);
+      const [adminPinInput, setAdminPinInput] = useState('');
+      const [adminPinError, setAdminPinError] = useState('');
+      const [adminPin] = useState('1234'); // Stage Manager PIN
+
+      const [rehearsals, setRehearsals] = useState(() => {
+        const saved = localStorage.getItem('frozen_rehearsals');
+        return saved ? JSON.parse(saved) : INITIAL_REHEARSALS;
+      });
+
+      const [tracks, setTracks] = useState(() => {
+        const saved = localStorage.getItem('frozen_tracks');
+        return saved ? JSON.parse(saved) : DEFAULT_AUDIO_TRACKS;
+      });
+
+      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL'); // 'ALL', 'SNOW', 'ICE'
+      const [callSearchRole, setCallSearchRole] = useState('');
+
+      // Audio Player
+      const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [audioDuration, setAudioDuration] = useState(0);
+      const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+      const [playbackRate, setPlaybackRate] = useState(1.0);
+      const audioRef = useRef(new Audio());
+
+      // Admin Form State
+      const [isEditingCall, setIsEditingCall] = useState(false);
+      const [editCallData, setEditCallData] = useState({
+        id: '',
+        title: '',
+        date: '',
+        time: '5:30 PM - 8:00 PM',
+        location: 'Rehearsal Hall',
+        type: 'Partial Call',
+        calledRoles: '',
+        focusScenes: '',
+        notes: ''
+      });
+
+      const QUICK_ROLES = [
+        'Full Cast', 'Snow Cast', 'Ice Cast', 'Elsa', 'Anna', 'Olaf', 'Kristoff', 'Sven', 'Hans',
+        'Young Elsa/Anna', 'Hidden Folk', 'Snow Chorus', 'Oaken Family'
+      ];
+
+      useEffect(() => {
+        localStorage.setItem('frozen_rehearsals', JSON.stringify(rehearsals));
+      }, [rehearsals]);
+
+      useEffect(() => {
+        localStorage.setItem('frozen_tracks', JSON.stringify(tracks));
+      }, [tracks]);
+
+      useEffect(() => {
+        const audio = audioRef.current;
+        const currentTrack = tracks[currentTrackIndex];
+        if (!currentTrack) return;
+
+        const playableSrc = formatDriveAudioUrl(currentTrack.url);
+        audio.src = playableSrc;
+        audio.playbackRate = playbackRate;
+
+        const onTimeUpdate = () => setAudioCurrentTime(audio.currentTime);
+        const onLoadedMeta = () => setAudioDuration(audio.duration || 0);
+        const onEnded = () => {
+          if (currentTrackIndex < tracks.length - 1) {
+            setCurrentTrackIndex(prev => prev + 1);
+          } else {
+            setIsPlaying(false);
+          }
+        };
+
+        audio.addEventListener('timeupdate', onTimeUpdate);
+        audio.addEventListener('loadedmetadata', onLoadedMeta);
+        audio.addEventListener('ended', onEnded);
+
+        if (isPlaying) {
+          audio.play().catch(e => console.log('Autoplay blocked:', e));
+        }
+
+        return () => {
+          audio.removeEventListener('timeupdate', onTimeUpdate);
+          audio.removeEventListener('loadedmetadata', onLoadedMeta);
+          audio.removeEventListener('ended', onEnded);
+        };
+      }, [currentTrackIndex, tracks]);
+
+      const togglePlay = () => {
+        const audio = audioRef.current;
+        if (isPlaying) {
+          audio.pause();
+          setIsPlaying(false);
+        } else {
+          audio.play().then(() => setIsPlaying(true)).catch(e => alert("Could not play audio. Ensure Google Drive link sharing is set to 'Anyone with the link'"));
+        }
+      };
+
+      const handleSeek = (e) => {
+        const time = Number(e.target.value);
+        audioRef.current.currentTime = time;
+        setAudioCurrentTime(time);
+      };
+
+      const changeRate = (rate) => {
+        setPlaybackRate(rate);
+        audioRef.current.playbackRate = rate;
+      };
+
+      const formatTime = (secs) => {
+        if (isNaN(secs)) return '0:00';
+        const mins = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60);
+        return `${mins}:${s < 10 ? '0' : ''}${s}`;
+      };
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (adminPinInput === adminPin) {
+          setIsAdmin(true);
+          setShowLoginModal(false);
+          setAdminPinInput('');
+          setAdminPinError('');
+        } else {
+          setAdminPinError('Invalid PIN. Contact Stage Management.');
+        }
+      };
+
+      const openAddCall = () => {
+        setEditCallData({
+          id: 'reh-' + Date.now(),
+          title: 'Wednesday Specialized Staging',
+          date: new Date().toISOString().split('T')[0],
+          time: '5:30 PM - 8:00 PM',
+          location: 'Main Stage / Rehearsal Hall',
+          type: 'Partial Call',
+          calledRoles: 'Elsa, Anna, Olaf',
+          focusScenes: 'Scene 4 & Act 1 Harmonies',
+          notes: 'Targeted calls determined from Saturday run-through.'
+        });
+        setIsEditingCall(true);
+      };
+
+      const saveCall = (e) => {
+        e.preventDefault();
+        const roleArray = typeof editCallData.calledRoles === 'string'
+          ? editCallData.calledRoles.split(',').map(s => s.trim()).filter(Boolean)
+          : editCallData.calledRoles;
+
+        const sceneArray = typeof editCallData.focusScenes === 'string'
+          ? editCallData.focusScenes.split(',').map(s => s.trim()).filter(Boolean)
+          : editCallData.focusScenes;
+
+        const newEntry = {
+          ...editCallData,
+          calledRoles: roleArray,
+          focusScenes: sceneArray
+        };
+
+        const existingIndex = rehearsals.findIndex(r => r.id === newEntry.id);
+        if (existingIndex > -1) {
+          const updated = [...rehearsals];
+          updated[existingIndex] = newEntry;
+          setRehearsals(updated);
+        } else {
+          const updated = [...rehearsals, newEntry].sort((a, b) => new Date(a.date) - new Date(b.date));
+          setRehearsals(updated);
+        }
+        setIsEditingCall(false);
+      };
+
+      const deleteCall = (id) => {
+        if (confirm("Delete this rehearsal call notice?")) {
+          setRehearsals(rehearsals.filter(r => r.id !== id));
+        }
+      };
+
+      const filteredRehearsals = useMemo(() => {
+        if (!callSearchRole.trim()) return rehearsals;
+        const query = callSearchRole.toLowerCase();
+        return rehearsals.filter(r => {
+          const inRoles = r.calledRoles.some(role => role.toLowerCase().includes(query) || role.toLowerCase() === 'full cast');
+          const inTitle = r.title.toLowerCase().includes(query);
+          return inRoles || inTitle;
+        });
+      }, [rehearsals, callSearchRole]);
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          {/* Header Banner */}
+          <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-cyan-500/20 pb-6 mb-6">
+            <div className="flex items-center gap-4 text-center md:text-left">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-600 to-sky-300 flex items-center justify-center text-white text-3xl shadow-lg shadow-cyan-500/30">
+                ❄️
+              </div>
+              <div>
+                <span className="text-xs uppercase tracking-widest text-cyan-400 font-bold bg-cyan-950/80 px-2.5 py-1 rounded-full border border-cyan-700/50">
+                  Cast & Crew Portal
+                </span>
+                <h1 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-100 via-cyan-200 to-blue-300 tracking-wide mt-1">
+                  FROZEN JR.
+                </h1>
+                <p className="text-xs md:text-sm text-cyan-200/70">
+                  Rehearsal Call Board • Tracks • Snow & Ice Double Cast Hub
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {isAdmin ? (
+                <div className="flex items-center gap-3 bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Director / Crew Admin
+                  <button 
+                    onClick={() => setIsAdmin(false)}
+                    className="ml-2 text-emerald-400 hover:text-white underline text-xs">
+                    Lock
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => setShowLoginModal(true)}
+                  className="flex items-center gap-2 bg-slate-800/90 hover:bg-slate-700 border border-cyan-500/30 text-cyan-200 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition">
+                  <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                  Staff Login
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* Navigation Bar */}
+          <nav className="flex flex-wrap items-center gap-2 mb-8 bg-slate-900/60 p-1.5 rounded-2xl border border-cyan-900/50 backdrop-blur-md">
+            {[
+              { id: 'callboard', label: 'Call Board & Schedule', icon: '📅' },
+              { id: 'cast', label: 'Snow & Ice Cast List', icon: '🎭' },
+              { id: 'music', label: 'Rehearsal Tracks', icon: '🎵' },
+              { id: 'videos', label: 'Choreography Vault', icon: '🎬' },
+              { id: 'calendar', label: 'Master Calendar', icon: '🗓️' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 flex-1 md:flex-initial text-center justify-center ${
+                  activeTab === tab.id
+                    ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-900/50'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          {/* ======================================================== */}
+          {/* TAB 1: CALL BOARD & REHEARSAL CALLS                      */}
+          {/* ======================================================== */}
+          {activeTab === 'callboard' && (
+            <div className="space-y-6">
+              <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="w-full md:w-auto flex-1">
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Filter by your role (e.g., Olaf, Anna, Snow Cast, Ensemble)..."
+                      value={callSearchRole}
+                      onChange={(e) => setCallSearchRole(e.target.value)}
+                      className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                    />
+                    {callSearchRole && (
+                      <button 
+                        onClick={() => setCallSearchRole('')}
+                        className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-white">
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">
+                    💡 Tip: Wednesday call sheets are customized based on notes from Saturday company rehearsals.
+                  </p>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-3 w-full md:w-auto">
+                    <button
+                      onClick={openAddCall}
+                      className="w-full md:w-auto bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold px-4 py-2.5 rounded-xl text-xs md:text-sm shadow-lg flex items-center justify-center gap-2 transition"
+                    >
+                      <span className="text-base font-black">+</span> Post New Rehearsal Call
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-5">
+                {filteredRehearsals.map((reh) => {
+                  const isFullCast = reh.type === 'Full Cast' || (Array.isArray(reh.calledRoles) && reh.calledRoles.includes('Full Cast'));
+
+                  return (
+                    <div 
+                      key={reh.id} 
+                      className={`glass-card p-6 rounded-2xl relative transition hover:border-cyan-400/50 ${
+                        isFullCast ? 'border-l-4 border-l-cyan-400' : 'border-l-4 border-l-amber-400'
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-700/50 pb-4 mb-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className={`text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-md ${
+                              isFullCast 
+                                ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' 
+                                : 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
+                            }`}>
+                              {reh.type}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-400">
+                              📍 {reh.location}
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-bold text-white font-cinzel">
+                            {reh.title}
+                          </h3>
+                        </div>
+
+                        <div className="bg-slate-900/90 border border-cyan-900 px-4 py-2 rounded-xl text-left md:text-right shrink-0">
+                          <div className="text-sm font-black text-cyan-300">
+                            {new Date(reh.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                          <div className="text-xs text-slate-300 font-semibold">{reh.time}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
+                          <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center gap-1.5">
+                            <span>👥</span> Called Cast & Characters:
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Array.isArray(reh.calledRoles) ? (
+                              reh.calledRoles.map((role, i) => (
+                                <span 
+                                  key={i} 
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                    role === 'Full Cast'
+                                      ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30'
+                                      : 'bg-slate-800 text-sky-200 border border-slate-700'
+                                  }`}
+                                >
+                                  {role}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-300">{reh.calledRoles}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
+                          <div className="text-xs uppercase tracking-wider text-amber-400 font-bold mb-2 flex items-center gap-1.5">
+                            <span>🎭</span> Working Scenes & Songs:
+                          </div>
+                          <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                            {Array.isArray(reh.focusScenes) ? (
+                              reh.focusScenes.map((sc, i) => (
+                                <li key={i}><span className="font-semibold text-slate-200">{sc}</span></li>
+                              ))
+                            ) : (
+                              <li>{reh.focusScenes}</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+
+                      {reh.notes && (
+                        <div className="mt-3 text-xs text-cyan-200/80 bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg flex items-start gap-2">
+                          <span className="text-cyan-400 font-bold">📝 Note:</span>
+                          <span>{reh.notes}</span>
+                        </div>
+                      )}
+
+                      {isAdmin && (
+                        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-end gap-3 text-xs">
+                          <button
+                            onClick={() => {
+                              setEditCallData({
+                                ...reh,
+                                calledRoles: Array.isArray(reh.calledRoles) ? reh.calledRoles.join(', ') : reh.calledRoles,
+                                focusScenes: Array.isArray(reh.focusScenes) ? reh.focusScenes.join(', ') : reh.focusScenes
+                              });
+                              setIsEditingCall(true);
+                            }}
+                            className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+                            ✏️ Edit Call
+                          </button>
+                          <button
+                            onClick={() => deleteCall(reh.id)}
+                            className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1">
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 2: DOUBLE CAST LIST (SNOW CAST & ICE CAST)           */}
+          {/* ======================================================== */}
+          {activeTab === 'cast' && (
+            <div className="space-y-6">
+              <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold font-cinzel text-white">Frozen JR. Cast Roster</h2>
+                  <p className="text-xs text-slate-400">Double cast breakdown for Snow Cast and Ice Cast performances</p>
+                </div>
+
+                <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-cyan-900/60">
+                  <button
+                    onClick={() => setSelectedCastGroup('ALL')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      selectedCastGroup === 'ALL' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Both Casts
+                  </button>
+                  <button
+                    onClick={() => setSelectedCastGroup('SNOW')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      selectedCastGroup === 'SNOW' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🌨️ Snow Cast
+                  </button>
+                  <button
+                    onClick={() => setSelectedCastGroup('ICE')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      selectedCastGroup === 'ICE' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🧊 Ice Cast
+                  </button>
+                </div>
+              </div>
+
+              <div className="glass-card rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-900/90 text-cyan-300 text-xs uppercase font-cinzel tracking-wider border-b border-cyan-900/50">
+                      <tr>
+                        <th className="py-3.5 px-4">Role / Character</th>
+                        <th className="py-3.5 px-4">Tier</th>
+                        {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SNOW') && (
+                          <th className="py-3.5 px-4 text-sky-300 font-extrabold tracking-wide">🌨️ Snow Cast</th>
+                        )}
+                        {(selectedCastGroup === 'ALL' || selectedCastGroup === 'ICE') && (
+                          <th className="py-3.5 px-4 text-indigo-300 font-extrabold tracking-wide">🧊 Ice Cast</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans">
+                      {CAST_MEMBERS.map((member, idx) => (
+                        <tr key={idx} className="hover:bg-slate-800/40 transition">
+                          <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
+                            <span>❄️</span> {member.role}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                              member.category === 'Lead' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
+                              member.category === 'Principal' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                              'bg-slate-800 text-slate-300'
+                            }`}>
+                              {member.category}
+                            </span>
+                          </td>
+                          {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SNOW') && (
+                            <td className="py-3 px-4 font-semibold text-slate-200">
+                              {member.castSnow}
+                            </td>
+                          )}
+                          {(selectedCastGroup === 'ALL' || selectedCastGroup === 'ICE') && (
+                            <td className="py-3 px-4 font-semibold text-slate-200">
+                              {member.castIce}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 3: REHEARSAL AUDIO TRACKS                            */}
+          {/* ======================================================== */}
+          {activeTab === 'music' && (
+            <div className="space-y-6">
+              <div className="glass-card glass-card-active p-6 rounded-3xl relative overflow-hidden">
+                <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
+                  <div className="w-28 h-28 rounded-2xl bg-gradient-to-tr from-cyan-600 via-sky-500 to-indigo-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-900/40 shrink-0">
+                    ❄️
+                  </div>
+
+                  <div className="flex-1 w-full text-center md:text-left">
+                    <span className="text-xs uppercase tracking-widest text-cyan-400 font-bold">
+                      Now Rehearsing • Track {currentTrackIndex + 1} of {tracks.length}
+                    </span>
+                    <h3 className="text-2xl font-extrabold text-white font-cinzel mt-1">
+                      {tracks[currentTrackIndex]?.title || 'Select a Track'}
+                    </h3>
+                    <p className="text-xs text-cyan-200/80 mt-0.5">
+                      {tracks[currentTrackIndex]?.artist} • <span className="text-amber-300 font-semibold">{tracks[currentTrackIndex]?.type}</span>
+                    </p>
+
+                    <div className="mt-4">
+                      <input 
+                        type="range"
+                        min="0"
+                        max={audioDuration || 100}
+                        value={audioCurrentTime}
+                        onChange={handleSeek}
+                        className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                      />
+                      <div className="flex justify-between text-[11px] text-slate-400 font-mono mt-1">
+                        <span>{formatTime(audioCurrentTime)}</span>
+                        <span>{formatTime(audioDuration)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-4 mt-3">
+                      <div className="flex items-center gap-1.5 text-xs bg-slate-900/90 px-2.5 py-1 rounded-xl border border-slate-800">
+                        <span className="text-slate-400">Speed:</span>
+                        {[0.8, 1.0, 1.2].map(rate => (
+                          <button
+                            key={rate}
+                            onClick={() => changeRate(rate)}
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                              playbackRate === rate ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setCurrentTrackIndex(Math.max(0, currentTrackIndex - 1))}
+                          disabled={currentTrackIndex === 0}
+                          className="p-2 text-slate-300 hover:text-white disabled:opacity-40"
+                        >
+                          ⏮️
+                        </button>
+                        <button
+                          onClick={togglePlay}
+                          className="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-500 to-sky-400 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg shadow-cyan-500/40 transition transform active:scale-95"
+                        >
+                          {isPlaying ? '⏸' : '▶'}
+                        </button>
+                        <button
+                          onClick={() => setCurrentTrackIndex(Math.min(tracks.length - 1, currentTrackIndex + 1))}
+                          disabled={currentTrackIndex === tracks.length - 1}
+                          className="p-2 text-slate-300 hover:text-white disabled:opacity-40"
+                        >
+                          ⏭️
+                        </button>
+                      </div>
+
+                      <a 
+                        href={tracks[currentTrackIndex]?.url} 
+                        download
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-200 px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center gap-1"
+                      >
+                        ⬇️ Download File
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="glass-card rounded-2xl overflow-hidden p-4">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
+                  <h4 className="font-cinzel font-bold text-white text-base">Rehearsal Tracklist</h4>
+                  <span className="text-xs text-slate-400">Stream or save for offline learning</span>
+                </div>
+
+                <div className="divide-y divide-slate-800/60">
+                  {tracks.map((track, i) => (
+                    <div 
+                      key={track.id}
+                      onClick={() => {
+                        setCurrentTrackIndex(i);
+                        setIsPlaying(true);
+                      }}
+                      className={`py-3 px-3 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition ${
+                        currentTrackIndex === i ? 'bg-cyan-950/70 border border-cyan-800/60' : 'hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                          currentTrackIndex === i ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {currentTrackIndex === i && isPlaying ? '🔊' : (i + 1)}
+                        </div>
+                        <div>
+                          <div className={`text-sm font-bold ${currentTrackIndex === i ? 'text-cyan-300' : 'text-white'}`}>
+                            {track.title}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {track.artist}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-semibold uppercase bg-slate-800 px-2 py-0.5 rounded text-cyan-300">
+                          {track.type}
+                        </span>
+                        <a 
+                          href={track.url}
+                          download
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-700/50"
+                        >
+                          💾
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 4: CHOREOGRAPHY VIDEOS                               */}
+          {/* ======================================================== */}
+          {activeTab === 'videos' && (
+            <div className="space-y-6">
+              <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold font-cinzel text-white">Choreography & Blocking Vault</h3>
+                  <p className="text-xs text-slate-300">Videos are hosted unlisted on YouTube. Review footwork before Saturday runs!</p>
+                </div>
+                <div className="text-xs bg-cyan-950 text-cyan-300 border border-cyan-800 px-3 py-1.5 rounded-xl font-semibold">
+                  📹 YouTube Vault
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {CHOREO_VIDEOS.map(video => (
+                  <div key={video.id} className="glass-card rounded-2xl overflow-hidden flex flex-col">
+                    <div className="aspect-video w-full bg-slate-950 relative">
+                      <iframe
+                        className="w-full h-full"
+                        src={`https://www.youtube-nocookie.com/embed/${video.videoId}?rel=0`}
+                        title={video.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    </div>
+
+                    <div className="p-4 flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[10px] font-extrabold uppercase bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800">
+                            {video.scene}
+                          </span>
+                          <span className="text-xs text-slate-400 font-semibold">{video.source}</span>
+                        </div>
+                        <h4 className="text-base font-bold text-white font-cinzel mt-1">
+                          {video.title}
+                        </h4>
+                        <p className="text-xs text-slate-300 mt-2 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                          <strong className="text-amber-300">Director Note:</strong> {video.notes}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 5: MASTER GOOGLE CALENDAR EMBED & ONE-TAP SUBSCRIBE  */}
+          {/* ======================================================== */}
+          {activeTab === 'calendar' && (
+            <div className="space-y-6">
+              <div className="glass-card p-6 rounded-3xl border border-cyan-500/20 shadow-xl">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-bold bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
+                      Live Schedule Sync
+                    </span>
+                    <h3 className="text-2xl font-bold font-cinzel text-white mt-1.5">Production Master Calendar</h3>
+                    <p className="text-xs md:text-sm text-slate-300">
+                      Sync this schedule directly to your phone so you never miss a Saturday company run, Wednesday call, or tech week rehearsal.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <a
+                      href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(CALENDAR_ID)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-200 text-xs font-bold px-3.5 py-2.5 rounded-xl transition shadow-md hover:border-cyan-400"
+                    >
+                      <svg className="w-4 h-4 fill-current text-cyan-400" viewBox="0 0 24 24">
+                        <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
+                      </svg>
+                      <span>+ Add to Google Calendar</span>
+                    </a>
+
+                    <a
+                      href={`webcal://calendar.google.com/calendar/ical/${encodeURIComponent(CALENDAR_ID)}/public/basic.ics`}
+                      className="flex items-center gap-2 bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl transition shadow-lg shadow-cyan-500/20"
+                    >
+                      <svg className="w-4 h-4 fill-current text-slate-950" viewBox="0 0 24 24">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.85-.9.04-2 .6-2.65 1.35-.58.67-1.09 1.74-.95 2.77.99.08 2.04-.52 2.68-1.27z"/>
+                      </svg>
+                      <span>Subscribe on iPhone / Mac</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div className="aspect-[4/3] md:aspect-[16/9] w-full rounded-2xl overflow-hidden border border-cyan-800/50 bg-slate-950 shadow-inner">
+                  <iframe
+                    src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FNew_York`}
+                    style={{ border: 0 }}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    scrolling="no"
+                    title="Frozen JR Production Calendar"
+                  ></iframe>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+                  <span>⏰ Displaying America/New York time zone</span>
+                  <span className="text-cyan-300 font-medium">Auto-updates across devices</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* MODAL: ADMIN LOGIN                                       */}
+          {/* ======================================================== */}
+          {showLoginModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="glass-card max-w-sm w-full p-6 rounded-3xl border border-cyan-500/40 shadow-2xl relative">
+                <button 
+                  onClick={() => setShowLoginModal(false)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+                  ✕
+                </button>
+                <div className="text-center mb-5">
+                  <div className="w-12 h-12 bg-cyan-950 border border-cyan-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-2 text-cyan-300">
+                    🔒
+                  </div>
+                  <h3 className="text-lg font-bold font-cinzel text-white">Production Staff Access</h3>
+                  <p className="text-xs text-slate-400">Enter crew PIN to post & edit rehearsal calls</p>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <input 
+                      type="password"
+                      placeholder="Enter Access PIN (Default: 1234)"
+                      value={adminPinInput}
+                      onChange={(e) => setAdminPinInput(e.target.value)}
+                      autoFocus
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 focus:outline-none focus:border-cyan-400"
+                    />
+                    {adminPinError && (
+                      <p className="text-red-400 text-xs mt-1.5 text-center">{adminPinError}</p>
+                    )}
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-cyan-600 to-sky-500 hover:from-cyan-500 hover:to-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-sm transition shadow-lg shadow-cyan-600/30">
+                    Unlock Admin Tools
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* MODAL: POST / EDIT REHEARSAL CALL                        */}
+          {/* ======================================================== */}
+          {isEditingCall && (
+            <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+              <div className="glass-card max-w-lg w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl my-8">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-4">
+                  <h3 className="text-lg font-bold font-cinzel text-white">
+                    {editCallData.id ? 'Publish / Edit Rehearsal Call' : 'New Rehearsal Call'}
+                  </h3>
+                  <button onClick={() => setIsEditingCall(false)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+
+                <form onSubmit={saveCall} className="space-y-4 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Notice Headline</label>
+                    <input 
+                      type="text"
+                      required
+                      value={editCallData.title}
+                      onChange={(e) => setEditCallData({...editCallData, title: e.target.value})}
+                      placeholder="e.g., Wednesday Vocal & Staging Clinic"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Rehearsal Date</label>
+                      <input 
+                        type="date"
+                        required
+                        value={editCallData.date}
+                        onChange={(e) => setEditCallData({...editCallData, date: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Call Type</label>
+                      <select 
+                        value={editCallData.type}
+                        onChange={(e) => setEditCallData({...editCallData, type: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                      >
+                        <option value="Partial Call">Wednesday / Partial Call</option>
+                        <option value="Full Cast">Saturday Company (Full Cast)</option>
+                        <option value="Tech / Dress">Tech / Dress Rehearsal</option>
+                        <option value="Principals Only">Principals Only</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Time Block</label>
+                      <input 
+                        type="text"
+                        value={editCallData.time}
+                        onChange={(e) => setEditCallData({...editCallData, time: e.target.value})}
+                        placeholder="e.g., 5:30 PM - 8:00 PM"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Room / Location</label>
+                      <input 
+                        type="text"
+                        value={editCallData.location}
+                        onChange={(e) => setEditCallData({...editCallData, location: e.target.value})}
+                        placeholder="e.g., Main Stage / Chorus Rm"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">
+                      Who is Called? <span className="font-normal text-slate-400">(Comma-separated roles)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      required
+                      value={editCallData.calledRoles}
+                      onChange={(e) => setEditCallData({...editCallData, calledRoles: e.target.value})}
+                      placeholder="e.g., Elsa, Anna, Olaf, Kristoff, Snow Cast"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white mb-2"
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      <span className="text-[10px] text-slate-400 py-0.5">Quick Add:</span>
+                      {QUICK_ROLES.map(qr => (
+                        <button
+                          key={qr}
+                          type="button"
+                          onClick={() => {
+                            const cur = editCallData.calledRoles ? editCallData.calledRoles.split(',').map(s=>s.trim()) : [];
+                            if (!cur.includes(qr)) {
+                              setEditCallData({
+                                ...editCallData,
+                                calledRoles: cur.length ? `${editCallData.calledRoles}, ${qr}` : qr
+                              });
+                            }
+                          }}
+                          className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] px-2 py-0.5 rounded border border-slate-700"
+                        >
+                          +{qr}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">
+                      Focus Scenes / Music <span className="font-normal text-slate-400">(Comma-separated)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      value={editCallData.focusScenes}
+                      onChange={(e) => setEditCallData({...editCallData, focusScenes: e.target.value})}
+                      placeholder='e.g., Scene 4: "In Summer", Act 1 Harmonies'
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Production Notes for Parents/Cast</label>
+                    <textarea 
+                      rows="2"
+                      value={editCallData.notes}
+                      onChange={(e) => setEditCallData({...editCallData, notes: e.target.value})}
+                      placeholder="Bring character shoes, water, pencils for blocking notes..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                    ></textarea>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsEditingCall(false)}
+                      className="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800">
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-2 rounded-xl transition shadow-lg shadow-cyan-500/20">
+                      Publish to Call Board
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <footer className="mt-12 text-center text-xs text-slate-500 border-t border-slate-800/80 pt-6">
+            <p>Frozen JR. • Community Youth Theater Production Portal</p>
+            <p className="mt-1">Snow Cast & Ice Cast Schedules • Audio via Google Drive • Choreography via YouTube</p>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<ProductionApp />);
+  </script>
+</body>
+</html>
