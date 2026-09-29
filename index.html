@@ -66,7 +66,6 @@
       50% { background-position: 100% 50%; }
       100% { background-position: 0% 50%; }
     }
-    /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #082f49; }
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
@@ -89,6 +88,82 @@
 
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
+
+    // Robust Date Formatter for Google Sheets & ISO Strings
+    function formatCallBoardDate(rawVal) {
+      if (!rawVal) return '';
+
+      if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
+        return rawVal.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+
+      const str = String(rawVal).trim();
+
+      // 1. Matches "YYYY-MM-DD" or standard ISO strings
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (ymd) {
+        const y = parseInt(ymd[1], 10);
+        const m = parseInt(ymd[2], 10) - 1;
+        const d = parseInt(ymd[3], 10);
+        const dt = new Date(y, m, d);
+        if (!isNaN(dt.getTime())) {
+          return dt.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+        }
+      }
+
+      // 2. Matches "M/D/YYYY" or "MM/DD/YYYY"
+      const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mdy) {
+        const m = parseInt(mdy[1], 10) - 1;
+        const d = parseInt(mdy[2], 10);
+        const y = parseInt(mdy[3], 10);
+        const dt = new Date(y, m, d);
+        if (!isNaN(dt.getTime())) {
+          return dt.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+        }
+      }
+
+      // 3. Direct browser fallback
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+
+      return str;
+    }
+
+    // Helper: Turn any date representation into comparable epoch timestamp
+    function parseDateTimestamp(val) {
+      if (!val) return 0;
+      if (val instanceof Date) return val.getTime();
+      const str = String(val).trim();
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (ymd) {
+        return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10)).getTime();
+      }
+      const t = new Date(str).getTime();
+      return isNaN(t) ? 0 : t;
+    }
 
     // Helper: Web Audio API Synthesized Brass Trumpet Fanfare
     function playAudibleFanfare() {
@@ -195,7 +270,7 @@
       });
     }
 
-    // Helper: CSV Parser that handles standard double quotes and preserves apostrophes
+    // Helper: CSV Parser
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
@@ -298,7 +373,6 @@
         }
       });
 
-      // Alphabetical sorting by first name
       return Array.from(actorMap.values())
         .map(a => ({
           ...a,
@@ -321,6 +395,7 @@
     const TAB_INFO = {
       callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
       cast: { label: 'Cast Members', icon: '🎭', path: 'cast' },
+      costumes: { label: 'Costumes', icon: '👗', path: 'costumes' },
       music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
       calendar: { label: 'Master Calendar', icon: '🗓️', path: 'calendar' }
@@ -347,7 +422,6 @@
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
-      // Pure in-memory state: Refreshing automatically resets all roles to hidden
       const [revealedCardIds, setRevealedCardIds] = useState([]);
       const [celebrationTarget, setCelebrationTarget] = useState(null);
 
@@ -434,6 +508,8 @@
               calledRoles: typeof item.calledRoles === 'string' ? item.calledRoles.split(',').map(s=>s.trim()).filter(Boolean) : (item.calledRoles || []),
               focusScenes: typeof item.focusScenes === 'string' ? item.focusScenes.split(',').map(s=>s.trim()).filter(Boolean) : (item.focusScenes || [])
             }));
+            // Sort reliably by timestamp
+            formatted.sort((a, b) => parseDateTimestamp(a.date) - parseDateTimestamp(b.date));
             setRehearsals(formatted);
             localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
             setBackendStatus('Connected to Google Sheet');
@@ -571,8 +647,11 @@
           updated = [...rehearsals];
           updated[existingIndex] = newEntry;
         } else {
-          updated = [...rehearsals, newEntry].sort((a, b) => new Date(a.date) - new Date(b.date));
+          updated = [...rehearsals, newEntry];
         }
+
+        // Resilient Date Sorting
+        updated.sort((a, b) => parseDateTimestamp(a.date) - parseDateTimestamp(b.date));
 
         setRehearsals(updated);
         localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
@@ -642,10 +721,9 @@
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
-          {/* Header Banner with Embedded MTI Hero Artwork as Primary Logo */}
+          {/* Header Banner */}
           <header className="flex flex-col md:flex-row items-center justify-between gap-5 border-b border-cyan-500/20 pb-6 mb-5">
             <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-              {/* Official Hero Artwork Display */}
               <div className="relative group shrink-0">
                 <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-sky-400 to-cyan-600 opacity-40 blur-md group-hover:opacity-75 transition duration-500"></div>
                 <img 
@@ -775,6 +853,8 @@
                   const isFullCast = (reh.type && reh.type.toLowerCase().includes('full cast')) || 
                                      (Array.isArray(reh.calledRoles) && reh.calledRoles.some(r => r.toLowerCase().includes('full cast') || r.toLowerCase() === 'company'));
 
+                  const formattedDate = formatCallBoardDate(reh.date);
+
                   return (
                     <div 
                       key={reh.id} 
@@ -803,11 +883,11 @@
                           </h3>
                         </div>
 
-                        {(reh.date || reh.time) && (
+                        {(formattedDate || reh.time) && (
                           <div className="bg-slate-900/90 border border-cyan-900 px-4 py-2 rounded-xl text-left md:text-right shrink-0">
-                            {reh.date && (
+                            {formattedDate && (
                               <div className="text-sm font-black text-cyan-300">
-                                {new Date(reh.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                {formattedDate}
                               </div>
                             )}
                             {reh.time && <div className="text-xs text-slate-300 font-semibold">{reh.time}</div>}
@@ -906,7 +986,6 @@
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
-              {/* TOP INFORMATIONAL NOTE CARD */}
               <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-cyan-950/60 p-5">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-2xl shrink-0 shadow-lg">
@@ -1010,7 +1089,7 @@
                 </div>
               </div>
 
-              {/* ACTOR-FIRST MYSTERY CARDS ROSTER (ALPHABETICAL) */}
+              {/* ACTOR-FIRST MYSTERY CARDS ROSTER */}
               {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
@@ -1097,96 +1176,36 @@
           )}
 
           {/* ======================================================== */}
-          {/* CELEBRATION PHOTO-OP FANFARE MODAL                       */}
+          {/* TAB 3: COSTUMES & WARDROBE (NEW SECTION)                 */}
           {/* ======================================================== */}
-          {celebrationTarget && (
-            <div 
-              className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
-              onClick={() => setCelebrationTarget(null)}
-            >
-              <div 
-                className="max-w-md w-full celebration-border p-1 rounded-3xl shadow-2xl relative animate-in fade-in zoom-in duration-300"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="bg-slate-950/95 rounded-[22px] p-6 md:p-8 text-center flex flex-col items-center relative overflow-hidden">
-                  
-                  {/* Close button */}
-                  <button 
-                    onClick={() => setCelebrationTarget(null)}
-                    className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900/80 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center text-sm transition"
-                  >
-                    ✕
-                  </button>
-
-                  {/* Logo Artwork Display in Celebration Modal */}
-                  <div className="mb-4">
-                    <img 
-                      src={FROZEN_HERO_IMAGE_URL} 
-                      alt="Disney's Frozen JR. Official Artwork"
-                      className="h-16 md:h-20 w-auto rounded-xl object-contain shadow-xl border border-cyan-400/40 bg-slate-950/90 p-1"
-                    />
-                  </div>
-
-                  <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full mb-2">
-                    OFFICIAL PRODUCTION CASTING
+          {activeTab === 'costumes' && (
+            <div className="space-y-6">
+              <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
+                <div>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
+                    Wardrobe & Costumes
                   </span>
-
-                  <h4 className="text-xs text-slate-400 uppercase tracking-wider font-semibold mt-1">
-                    Congratulations to
-                  </h4>
-
-                  {/* ACTOR NAME SPOTLIGHT */}
-                  <h2 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-white to-cyan-200 tracking-wide mt-1 mb-4 leading-tight">
-                    {celebrationTarget.actorName}
-                  </h2>
-
-                  {/* ASSIGNED ROLE BANNER */}
-                  <div className="w-full bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border border-cyan-500/40 p-4 rounded-2xl mb-4 shadow-inner">
-                    <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest block mb-1">
-                      Cast in the Role of
-                    </span>
-                    <span className="text-xl md:text-2xl font-cinzel font-black text-cyan-300 block">
-                      {celebrationTarget.role}
-                    </span>
-                    <div className="mt-2 inline-block text-[10px] uppercase font-bold text-slate-400 bg-slate-950/80 px-2.5 py-0.5 rounded border border-slate-800">
-                      {celebrationTarget.category || 'Company'}
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-cyan-200/80 italic mb-6 leading-relaxed">
-                    "Some people are worth melting for." ❄️ Have a magical time in rehearsals!
+                  <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Costume Plot & Base Layer Checklist</h3>
+                  <p className="text-xs text-slate-300">
+                    Costume pieces, fitting assignments, and items families need to supply for tech week.
                   </p>
-
-                  {/* Action buttons */}
-                  <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
-                    <button
-                      type="button"
-                      onClick={launchFanfareCelebration}
-                      className="w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-slate-950 font-black py-2.5 rounded-xl text-xs md:text-sm shadow-lg shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-1.5"
-                    >
-                      <span>🎺</span>
-                      <span>Play Fanfare Again!</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCelebrationTarget(null)}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold py-2.5 rounded-xl text-xs border border-slate-800 transition"
-                    >
-                      Close Card
-                    </button>
-                  </div>
-
-                  <div className="mt-4 text-[10px] text-slate-500">
-                    📸 Perfect photo opportunity! Take a screenshot to share with family & friends.
-                  </div>
                 </div>
+              </div>
+
+              <div className="glass-card p-12 text-center rounded-3xl border border-cyan-500/20">
+                <div className="w-16 h-16 bg-cyan-950 border border-cyan-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
+                  👗
+                </div>
+                <h3 className="text-xl font-bold font-cinzel text-white">Costume Breakdown Coming Soon</h3>
+                <p className="text-xs md:text-sm text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
+                  The wardrobe coordinators are currently compiling the full costume plots, fittings schedule, and family-provided guidelines (shoes, tights, and base layers). They will appear here once ready!
+                </p>
               </div>
             </div>
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: REHEARSAL AUDIO TRACKS (YOUTUBE PLAYLIST)         */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (YOUTUBE PLAYLIST)         */}
           {/* ======================================================== */}
           {activeTab === 'music' && (
             <div className="space-y-6">
@@ -1232,7 +1251,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 4: CHOREOGRAPHY & BLOCKING VAULT                     */}
+          {/* TAB 5: CHOREOGRAPHY & BLOCKING VAULT                     */}
           {/* ======================================================== */}
           {activeTab === 'videos' && (
             <div className="space-y-6">
@@ -1261,7 +1280,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 5: MASTER GOOGLE CALENDAR EMBED & ONE-TAP SUBSCRIBE  */}
+          {/* TAB 6: MASTER GOOGLE CALENDAR EMBED & ONE-TAP SUBSCRIBE  */}
           {/* ======================================================== */}
           {activeTab === 'calendar' && (
             <div className="space-y-6">
@@ -1317,6 +1336,89 @@
                 <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
                   <span>⏰ Displaying America/New York time zone</span>
                   <span className="text-cyan-300 font-medium">Auto-updates across devices</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* CELEBRATION MODAL                                        */}
+          {/* ======================================================== */}
+          {celebrationTarget && (
+            <div 
+              className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+              onClick={() => setCelebrationTarget(null)}
+            >
+              <div 
+                className="max-w-md w-full celebration-border p-1 rounded-3xl shadow-2xl relative animate-in fade-in zoom-in duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-slate-950/95 rounded-[22px] p-6 md:p-8 text-center flex flex-col items-center relative overflow-hidden">
+                  <button 
+                    onClick={() => setCelebrationTarget(null)}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900/80 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center text-sm transition"
+                  >
+                    ✕
+                  </button>
+
+                  <div className="mb-4">
+                    <img 
+                      src={FROZEN_HERO_IMAGE_URL} 
+                      alt="Disney's Frozen JR. Official Artwork"
+                      className="h-16 md:h-20 w-auto rounded-xl object-contain shadow-xl border border-cyan-400/40 bg-slate-950/90 p-1"
+                    />
+                  </div>
+
+                  <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full mb-2">
+                    OFFICIAL PRODUCTION CASTING
+                  </span>
+
+                  <h4 className="text-xs text-slate-400 uppercase tracking-wider font-semibold mt-1">
+                    Congratulations to
+                  </h4>
+
+                  <h2 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-white to-cyan-200 tracking-wide mt-1 mb-4 leading-tight">
+                    {celebrationTarget.actorName}
+                  </h2>
+
+                  <div className="w-full bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border border-cyan-500/40 p-4 rounded-2xl mb-4 shadow-inner">
+                    <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest block mb-1">
+                      Cast in the Role of
+                    </span>
+                    <span className="text-xl md:text-2xl font-cinzel font-black text-cyan-300 block">
+                      {celebrationTarget.role}
+                    </span>
+                    <div className="mt-2 inline-block text-[10px] uppercase font-bold text-slate-400 bg-slate-950/80 px-2.5 py-0.5 rounded border border-slate-800">
+                      {celebrationTarget.category || 'Company'}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-cyan-200/80 italic mb-6 leading-relaxed">
+                    "Some people are worth melting for." ❄️ Have a magical time in rehearsals!
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
+                    <button
+                      type="button"
+                      onClick={launchFanfareCelebration}
+                      className="w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-slate-950 font-black py-2.5 rounded-xl text-xs md:text-sm shadow-lg shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      <span>🎺</span>
+                      <span>Play Fanfare Again!</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCelebrationTarget(null)}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold py-2.5 rounded-xl text-xs border border-slate-800 transition"
+                    >
+                      Close Card
+                    </button>
+                  </div>
+
+                  <div className="mt-4 text-[10px] text-slate-500">
+                    📸 Perfect photo opportunity! Take a screenshot to share with family & friends.
+                  </div>
                 </div>
               </div>
             </div>
