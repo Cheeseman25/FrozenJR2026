@@ -87,7 +87,7 @@
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
-    // --- Helper: Web Audio API Synthesized Brass Trumpet Fanfare ---
+    // Helper: Web Audio API Synthesized Brass Trumpet Fanfare
     function playAudibleFanfare() {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -98,15 +98,13 @@
           ctx.resume();
         }
 
-        // Trumpet notes: Bb4, D5, F5, Bb5 triumphant fanfare progression
-        // [frequencies, start time offset (sec), duration (sec)]
         const notes = [
-          { freqs: [466.16], delay: 0.00, dur: 0.12 }, // Bb4
-          { freqs: [466.16], delay: 0.14, dur: 0.12 }, // Bb4
-          { freqs: [466.16], delay: 0.28, dur: 0.12 }, // Bb4
-          { freqs: [587.33, 700], delay: 0.44, dur: 0.35 }, // D5 chord
-          { freqs: [700], delay: 0.82, dur: 0.18 }, // F5
-          { freqs: [466.16, 587.33, 932.33], delay: 1.05, dur: 1.3 } // High Bb5 Major Victory Chord
+          { freqs: [466.16], delay: 0.00, dur: 0.12 },
+          { freqs: [466.16], delay: 0.14, dur: 0.12 },
+          { freqs: [466.16], delay: 0.28, dur: 0.12 },
+          { freqs: [587.33, 700], delay: 0.44, dur: 0.35 },
+          { freqs: [700], delay: 0.82, dur: 0.18 },
+          { freqs: [466.16, 587.33, 932.33], delay: 1.05, dur: 1.3 }
         ];
 
         const now = ctx.currentTime;
@@ -116,16 +114,13 @@
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
-            // Sawtooth waveform gives brass trumpet buzz
             osc.type = 'sawtooth';
             osc.frequency.setValueAtTime(freq, now + note.delay);
 
-            // Audio envelope (sharp brass attack, gentle decay)
             gain.gain.setValueAtTime(0.0001, now + note.delay);
             gain.gain.exponentialRampToValueAtTime(0.18, now + note.delay + 0.03);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + note.delay + note.dur);
 
-            // Connect and play
             osc.connect(gain);
             gain.connect(ctx.destination);
 
@@ -140,10 +135,8 @@
 
     // Helper: Confetti Cannon & Fanfare Trigger
     function launchFanfareCelebration() {
-      // 1. Play synthesized royal brass audio
       playAudibleFanfare();
 
-      // 2. Explode visual confetti bursts
       if (typeof confetti === 'function') {
         const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
 
@@ -302,11 +295,14 @@
         }
       });
 
-      return Array.from(actorMap.values()).map(a => ({
-        ...a,
-        role: a.roles.join(', '),
-        category: a.categories.join(' / ')
-      }));
+      // Alphabetical sorting by first name
+      return Array.from(actorMap.values())
+        .map(a => ({
+          ...a,
+          role: a.roles.join(', '),
+          category: a.categories.join(' / ')
+        }))
+        .sort((a, b) => a.actorName.localeCompare(b.actorName, undefined, { sensitivity: 'base' }));
     }
 
     const INITIAL_CALL_TYPES = [
@@ -348,9 +344,8 @@
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
-      // Pure in-memory state: Every browser refresh automatically resets all roles to hidden
+      // Pure in-memory state: Refreshing automatically resets all roles to hidden
       const [revealedCardIds, setRevealedCardIds] = useState([]);
-
       const [celebrationTarget, setCelebrationTarget] = useState(null);
 
       const [callTypes, setCallTypes] = useState(() => {
@@ -536,6 +531,13 @@
         launchFanfareCelebration();
       };
 
+      // Reveal all roles at once with celebration
+      const revealAllRoles = () => {
+        const allIds = actorList.map(a => a.id);
+        setRevealedCardIds(allIds);
+        launchFanfareCelebration();
+      };
+
       // Reset all revealed cards back to hidden state immediately
       const resetHiddenRoles = () => {
         setRevealedCardIds([]);
@@ -614,7 +616,7 @@
         if (!callSearchRole.trim()) return rehearsals;
         const query = callSearchRole.toLowerCase();
         return rehearsals.filter(r => {
-          const inRoles = Array.isArray(r.calledRoles) && r.calledRoles.some(role => role.toLowerCase().includes(query) || role.toLowerCase().includes('full cast') || role.toLowerCase().includes('company'));
+          const inRoles = Array.isArray(r.calledRoles) && r.calledRoles.some(role => role.toLowerCase().includes(query) || role.toLowerCase() === 'full cast' || role.toLowerCase() === 'company');
           const inTitle = r.title && r.title.toLowerCase().includes(query);
           return inRoles || inTitle;
         });
@@ -635,6 +637,8 @@
           return matchesQuery && matchesCategory;
         });
       }, [actorList, castFilterQuery, selectedCategoryFilter]);
+
+      const allRevealed = actorList.length > 0 && revealedCardIds.length >= actorList.length;
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -765,7 +769,7 @@
               <div className="grid gap-5">
                 {filteredRehearsals.map((reh) => {
                   const isFullCast = (reh.type && reh.type.toLowerCase().includes('full cast')) || 
-                                     (Array.isArray(reh.calledRoles) && reh.calledRoles.some(r => r.toLowerCase().includes('full cast') || r.toLowerCase().includes('company')));
+                                     (Array.isArray(reh.calledRoles) && reh.calledRoles.some(r => r.toLowerCase().includes('full cast') || r.toLowerCase() === 'company'));
 
                   return (
                     <div 
@@ -928,26 +932,45 @@
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Roles are hidden until tapped! Tapping plays celebration fanfare music & confetti.
+                      Roles and categories are completely hidden until tapped! Or click <strong>Reveal All Roles</strong> to expose everyone.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {revealedCardIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* REVEAL ALL / RE-HIDE ALL TOGGLE BUTTON */}
+                  {allRevealed ? (
                     <button
                       onClick={resetHiddenRoles}
-                      className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-700/80 flex items-center gap-1.5 transition shadow"
-                      title="Re-hide all revealed cards immediately"
+                      className="bg-amber-950/90 hover:bg-amber-900 text-amber-300 text-xs font-bold px-3.5 py-2 rounded-xl border border-amber-600/80 flex items-center gap-1.5 transition shadow-lg shadow-amber-950/40"
                     >
                       <span>🔒</span>
                       <span>Re-hide All Roles</span>
                     </button>
+                  ) : (
+                    <button
+                      onClick={revealAllRoles}
+                      className="bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition shadow-lg shadow-emerald-950/40 flex items-center gap-1.5"
+                    >
+                      <span>🔓</span>
+                      <span>Reveal All Roles</span>
+                    </button>
                   )}
+
+                  {revealedCardIds.length > 0 && !allRevealed && (
+                    <button
+                      onClick={resetHiddenRoles}
+                      className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 flex items-center gap-1.5 transition"
+                      title="Re-hide revealed roles"
+                    >
+                      <span>🔒 Reset</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={loadLiveCast}
                     disabled={isLoadingCast}
-                    className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-3 py-1.5 rounded-xl border border-cyan-800 flex items-center gap-1.5 transition disabled:opacity-50"
+                    className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-3 py-2 rounded-xl border border-cyan-800 flex items-center gap-1.5 transition disabled:opacity-50"
                   >
                     <span className={isLoadingCast ? 'animate-spin' : ''}>↻</span>
                     <span>{isLoadingCast ? 'Fetching...' : 'Refresh Cast'}</span>
@@ -978,13 +1001,13 @@
                           : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
                       }`}
                     >
-                      {cat === 'ALL' ? 'All Cast' : cat}
+                      {cat === 'ALL' ? 'All Cast (A-Z)' : cat}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* ACTOR-FIRST MYSTERY CARDS ROSTER */}
+              {/* ACTOR-FIRST MYSTERY CARDS ROSTER (ALPHABETICAL) */}
               {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
@@ -1000,29 +1023,42 @@
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredActorCards.map((item) => {
-                    const isEnsemble = item.isFeaturedEnsembleOrChorus;
-                    const catBadge = item.category || (isEnsemble ? 'Ensemble' : 'Lead');
                     const isRevealed = revealedCardIds.includes(item.id);
+                    const isEnsemble = item.isFeaturedEnsembleOrChorus;
+
+                    // Tag and Color Styling: Neutral before reveal, specific after reveal
+                    let badgeClass = 'bg-slate-800/80 text-slate-400 border-slate-700';
+                    let cardBorderClass = 'border-cyan-500/20 hover:border-cyan-400';
+                    let badgeLabel = '🎭 Cast Member';
+                    let icon = '❄️';
+
+                    if (isRevealed) {
+                      badgeLabel = item.category || (isEnsemble ? 'Ensemble' : 'Lead');
+                      if (isEnsemble) {
+                        badgeClass = 'bg-purple-950/80 text-purple-300 border-purple-800/80';
+                        cardBorderClass = 'border-purple-500/40 bg-purple-950/20 hover:border-purple-400';
+                        icon = '✨';
+                      } else {
+                        badgeClass = 'bg-cyan-950 text-cyan-300 border-cyan-800';
+                        cardBorderClass = 'border-cyan-500/30 hover:border-cyan-400';
+                        icon = '🎭';
+                      }
+                    }
 
                     return (
                       <div 
                         key={item.id}
                         onClick={() => openCelebration(item)}
-                        className={`glass-card p-5 rounded-2xl flex flex-col justify-between cursor-pointer transition-all duration-200 transform hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-cyan-500/20 active:scale-95 group ${
-                          isEnsemble ? 'border-purple-500/30 bg-purple-950/20 hover:border-purple-400' : 'border-cyan-500/20 hover:border-cyan-400'
-                        }`}
+                        className={`glass-card p-5 rounded-2xl flex flex-col justify-between cursor-pointer transition-all duration-200 transform hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-cyan-500/20 active:scale-95 group ${cardBorderClass}`}
                       >
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border transition ${
-                              isEnsemble 
-                                ? 'bg-purple-950/80 text-purple-300 border-purple-800/80 group-hover:bg-purple-900' 
-                                : 'bg-cyan-950 text-cyan-300 border-cyan-800 group-hover:bg-cyan-900'
-                            }`}>
-                              {catBadge}
+                            {/* CATEGORY BADGE: HIDDEN/NEUTRAL UNTIL REVEALED */}
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border transition ${badgeClass}`}>
+                              {badgeLabel}
                             </span>
                             <span className="text-sm group-hover:scale-125 transition-transform">
-                              {isEnsemble ? '✨' : '🎭'}
+                              {isRevealed ? icon : '🎁'}
                             </span>
                           </div>
 
@@ -1032,7 +1068,7 @@
                           </h3>
                         </div>
 
-                        {/* ASSIGNED ROLE (MYSTERY UNTIL REVEALED) */}
+                        {/* ASSIGNED ROLE: HIDDEN UNTIL REVEALED */}
                         <div className="mt-4 pt-3 border-t border-slate-800/80">
                           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
                             Assigned Role:
@@ -1043,7 +1079,7 @@
                               <span className="leading-snug">{item.role}</span>
                             </div>
                           ) : (
-                            <div className="text-xs font-bold text-cyan-400/70 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 mt-0.5 group-hover:border-cyan-500 group-hover:text-cyan-300">
+                            <div className="text-xs font-bold text-slate-300 bg-slate-900/80 border border-slate-700/80 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 mt-0.5 group-hover:border-cyan-500 group-hover:text-cyan-300 transition-colors">
                               <span>🎁</span>
                               <span>Tap card to reveal role!</span>
                             </div>
@@ -1051,7 +1087,7 @@
                         </div>
 
                         <div className="mt-3 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
-                          <span>🎺 Tap to celebrate</span>
+                          <span>{isRevealed ? '🎉 View card fanfare' : '🎺 Tap to reveal & celebrate'}</span>
                         </div>
                       </div>
                     );
