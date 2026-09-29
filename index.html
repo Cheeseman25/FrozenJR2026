@@ -80,13 +80,10 @@
 
     // --- Production Master Integrations ---
     const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
-    const CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
     const YOUTUBE_REHEARSAL_PLAYLIST_ID = "PLBDCgs4SWfnF2517NHRg4gLkayKkYssJb";
-
-    // Official MTI Frozen JR Primary Artwork
     const FROZEN_HERO_IMAGE_URL = "https://www.mtishows.com/sites/default/files/styles/hero_responsive_wide/public/show/hero/000523_hero_0.jpg?itok=9msnKhTB";
 
-    // Live Google Apps Script Web App Backend URL
+    // Google Apps Script Web App Backend Gateway
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
     // Universal Date Formatter for Google Sheets & ISO Strings
@@ -149,7 +146,7 @@
       return isNaN(t) ? 0 : t;
     }
 
-    // Helper: Web Audio API Synthesized Brass Trumpet Fanfare
+    // Synthesized Web Audio Trumpet Fanfare
     function playAudibleFanfare() {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -223,30 +220,11 @@
       });
     }
 
-    function parseCSV(text) {
-      const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length < 2) return [];
+    // Formats 2D Array from Google Apps Script into Actor Map
+    function processCastRows(rows) {
+      if (!Array.isArray(rows) || rows.length < 2) return [];
 
-      function parseRow(rowStr) {
-        const result = [];
-        let cur = '';
-        let inQuotes = false;
-        for (let i = 0; i < rowStr.length; i++) {
-          const char = rowStr[i];
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            result.push(cur.trim().replace(/^"|"$/g, ''));
-            cur = '';
-          } else {
-            cur += char;
-          }
-        }
-        result.push(cur.trim().replace(/^"|"$/g, ''));
-        return result;
-      }
-
-      const headers = parseRow(lines[0]).map(h => (h || '').toLowerCase().trim());
+      const headers = rows[0].map(h => String(h || '').toLowerCase().trim());
       const catIdx = headers.findIndex(h => h.includes('cat') || h.includes('type') || h.includes('group') || h.includes('tier'));
       const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
       const col2Idx = headers.findIndex(h => h.includes('summer') || h.includes('snow') || h.includes('cast a') || h.includes('actor') || h.includes('name'));
@@ -258,12 +236,11 @@
       const effectiveCol3 = col3Idx !== -1 ? col3Idx : 3;
 
       const rawItems = [];
-      lines.slice(1).forEach((line, rowIdx) => {
-        const cols = parseRow(line);
-        const category = cols[effectiveCatCol] || 'Company';
-        const role = cols[effectiveRoleCol] || `Role #${rowIdx + 1}`;
-        const valCol2 = cols[effectiveCol2] || '';
-        const valCol3 = cols[effectiveCol3] || '';
+      rows.slice(1).forEach((cols, rowIdx) => {
+        const category = String(cols[effectiveCatCol] || 'Company').trim();
+        const role = String(cols[effectiveRoleCol] || `Role #${rowIdx + 1}`).trim();
+        const valCol2 = String(cols[effectiveCol2] || '').trim();
+        const valCol3 = String(cols[effectiveCol3] || '').trim();
 
         const catLower = category.toLowerCase();
         const roleLower = role.toLowerCase();
@@ -276,9 +253,7 @@
           catLower.includes('ensemble') || 
           roleLower.includes('ensemble');
 
-        const actors = [valCol2, valCol3]
-          .map(v => v.trim())
-          .filter(v => v && v.toLowerCase() !== 'tbd');
+        const actors = [valCol2, valCol3].filter(v => v && v.toLowerCase() !== 'tbd');
 
         if (actors.length === 0) {
           rawItems.push({
@@ -356,11 +331,13 @@
       const [activeTab, setActiveTab] = useState(getInitialTab);
       const [copiedBreadcrumb, setCopiedBreadcrumb] = useState(false);
 
-      const [isAdmin, setIsAdmin] = useState(false);
+      // Secure Admin Session (Server Authenticated)
+      const [adminSessionToken, setAdminSessionToken] = useState(() => sessionStorage.getItem('frozen_admin_token') || '');
+      const isAdmin = Boolean(adminSessionToken);
       const [showLoginModal, setShowLoginModal] = useState(false);
       const [adminPinInput, setAdminPinInput] = useState('');
       const [adminPinError, setAdminPinError] = useState('');
-      const [adminPin] = useState('1234');
+      const [isAuthenticating, setIsAuthenticating] = useState(false);
 
       const [actorList, setActorList] = useState([]);
       const [isLoadingCast, setIsLoadingCast] = useState(true);
@@ -380,7 +357,7 @@
         const saved = localStorage.getItem('frozen_rehearsals');
         return saved ? JSON.parse(saved) : [];
       });
-      const [backendStatus, setBackendStatus] = useState('Checking connection...');
+      const [backendStatus, setBackendStatus] = useState('Connecting to backend...');
       const [callSearchRole, setCallSearchRole] = useState('');
 
       // Master Calendar State
@@ -425,22 +402,23 @@
         });
       };
 
+      // Load Cast Data Securely via Apps Script Proxy
       const loadLiveCast = async () => {
         setIsLoadingCast(true);
         setCastError(null);
         try {
-          const res = await fetch(`${CAST_CSV_URL}&t=${Date.now()}`);
-          if (!res.ok) throw new Error("Could not fetch Google Sheet data.");
-          const text = await res.text();
-          const parsed = parseCSV(text);
+          const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getCast&t=${Date.now()}`);
+          if (!res.ok) throw new Error("Could not fetch Cast data from backend.");
+          const rawRows = await res.json();
+          const parsed = processCastRows(rawRows);
           if (parsed.length > 0) {
             setActorList(parsed);
           } else {
-            setCastError("Spreadsheet returned no data rows yet.");
+            setCastError("Cast spreadsheet returned no actor rows yet.");
           }
         } catch (err) {
           console.error(err);
-          setCastError("Could not connect to Google Sheet. Check network connection or publish settings.");
+          setCastError("Could not connect to Cast roster backend. Check Apps Script permissions.");
         } finally {
           setIsLoadingCast(false);
         }
@@ -460,7 +438,7 @@
             formatted.sort((a, b) => parseDateTimestamp(a.date) - parseDateTimestamp(b.date));
             setRehearsals(formatted);
             localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
-            setBackendStatus('Connected to Google Sheet');
+            setBackendStatus('Connected to Google Sheet Backend');
           }
         } catch (e) {
           console.log('Backend sync offline, using local storage.');
@@ -478,7 +456,7 @@
             setCalendarEvents(data);
           }
         } catch (err) {
-          console.log("Could not load native calendar feed, fallback will be used:", err);
+          console.log("Could not load native calendar feed:", err);
         } finally {
           setIsLoadingCalendar(false);
         }
@@ -498,16 +476,38 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      const handleLogin = (e) => {
+      // Server-Side PIN Verification
+      const handleLogin = async (e) => {
         e.preventDefault();
-        if (adminPinInput === adminPin) {
-          setIsAdmin(true);
-          setShowLoginModal(false);
-          setAdminPinInput('');
-          setAdminPinError('');
-        } else {
-          setAdminPinError('Invalid PIN. Contact Stage Management.');
+        setIsAuthenticating(true);
+        setAdminPinError('');
+
+        try {
+          const res = await fetch(CALLBOARD_BACKEND_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'verifyPin', pin: adminPinInput })
+          });
+          const result = await res.json();
+
+          if (result.status === 'success') {
+            sessionStorage.setItem('frozen_admin_token', adminPinInput);
+            setAdminSessionToken(adminPinInput);
+            setShowLoginModal(false);
+            setAdminPinInput('');
+          } else {
+            setAdminPinError(result.message || 'Invalid PIN. Access denied.');
+          }
+        } catch (err) {
+          setAdminPinError('Error connecting to authentication server.');
+        } finally {
+          setIsAuthenticating(false);
         }
+      };
+
+      const handleLogout = () => {
+        sessionStorage.removeItem('frozen_admin_token');
+        setAdminSessionToken('');
       };
 
       const openAddCall = () => {
@@ -622,14 +622,17 @@
 
         if (CALLBOARD_BACKEND_URL) {
           try {
-            await fetch(CALLBOARD_BACKEND_URL, {
+            const res = await fetch(CALLBOARD_BACKEND_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ action: 'save', item: newEntry })
+              body: JSON.stringify({ action: 'save', pin: adminSessionToken, item: newEntry })
             });
-            console.log('Successfully saved to Google Sheet database.');
+            const data = await res.json();
+            if (data.status === 'error') {
+              alert('Save failed: ' + data.message);
+            }
           } catch (err) {
-            console.error('Error posting to Google Sheet backend', err);
+            console.error('Error posting to backend', err);
           }
         }
       };
@@ -642,11 +645,15 @@
 
           if (CALLBOARD_BACKEND_URL) {
             try {
-              await fetch(CALLBOARD_BACKEND_URL, {
+              const res = await fetch(CALLBOARD_BACKEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action: 'delete', id })
+                body: JSON.stringify({ action: 'delete', pin: adminSessionToken, id })
               });
+              const data = await res.json();
+              if (data.status === 'error') {
+                alert('Delete failed: ' + data.message);
+              }
             } catch (err) {
               console.error('Error sending delete to backend', err);
             }
@@ -682,7 +689,6 @@
 
       const allRevealed = actorList.length > 0 && revealedCardIds.length >= actorList.length;
 
-      // Group calendar events by Month/Year for clean reading
       const groupedCalendarEvents = useMemo(() => {
         const q = calendarSearch.toLowerCase().trim();
         const filtered = calendarEvents.filter(ev => {
@@ -732,7 +738,7 @@
                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   Director / Crew Admin
                   <button 
-                    onClick={() => setIsAdmin(false)}
+                    onClick={handleLogout}
                     className="ml-2 text-emerald-400 hover:text-white underline text-xs">
                     Lock
                   </button>
@@ -1071,7 +1077,7 @@
                 </div>
               </div>
 
-              {/* ACTOR-FIRST MYSTERY CARDS ROSTER */}
+              {/* Actor Cards */}
               {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
@@ -1158,7 +1164,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: COSTUMES & WARDROBE (NEW SECTION)                 */}
+          {/* TAB 3: COSTUMES & WARDROBE                               */}
           {/* ======================================================== */}
           {activeTab === 'costumes' && (
             <div className="space-y-6">
@@ -1187,7 +1193,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (YOUTUBE PLAYLIST)         */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS                            */}
           {/* ======================================================== */}
           {activeTab === 'music' && (
             <div className="space-y-6">
@@ -1313,7 +1319,7 @@
                   </div>
                 </div>
 
-                {/* Filter and View Controls */}
+                {/* Filter Controls */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
                   <div className="w-full sm:w-80">
                     <input
@@ -1361,7 +1367,6 @@
                                 className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500/40 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                               >
                                 <div className="flex items-start sm:items-center gap-4">
-                                  {/* Date Badge */}
                                   <div className="text-center bg-gradient-to-b from-cyan-950 to-slate-900 border border-cyan-700/60 px-3.5 py-2 rounded-xl shrink-0 min-w-[64px]">
                                     <div className="text-[10px] uppercase font-bold text-cyan-400">
                                       {start.toLocaleDateString('en-US', { weekday: 'short' })}
@@ -1406,31 +1411,11 @@
                   <div className="text-center py-8">
                     <p className="text-sm text-slate-400">
                       {calendarEvents.length === 0 
-                        ? 'No upcoming calendar events found in feed. (Check Apps Script deployment if you just updated it).' 
+                        ? 'No upcoming calendar events found in feed.' 
                         : 'No events match your search.'}
                     </p>
                   </div>
                 )}
-
-                {/* Secondary Fallback Schedule View for Quick Reference */}
-                <div className="mt-8 pt-6 border-t border-slate-800">
-                  <details className="text-xs text-slate-400 cursor-pointer">
-                    <summary className="hover:text-cyan-300 font-semibold select-none">
-                      Prefer the embedded Google Calendar schedule view? Click to expand.
-                    </summary>
-                    <div className="mt-4 aspect-[4/3] md:aspect-[16/9] w-full rounded-2xl overflow-hidden border border-cyan-800/50 bg-slate-950">
-                      <iframe
-                        src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FNew_York&mode=AGENDA&showTabs=1&showPrint=0&showTitle=0&showCalendars=0&bgcolor=%23082f49`}
-                        style={{ border: 0 }}
-                        width="100%"
-                        height="100%"
-                        frameBorder="0"
-                        scrolling="no"
-                        title="Frozen JR Production Calendar"
-                      ></iframe>
-                    </div>
-                  </details>
-                </div>
               </div>
             </div>
           )}
@@ -1519,7 +1504,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* MODAL: ADMIN LOGIN                                       */}
+          {/* MODAL: ADMIN LOGIN (SERVER-VALIDATED PIN)                */}
           {/* ======================================================== */}
           {showLoginModal && (
             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1541,11 +1526,12 @@
                   <div>
                     <input 
                       type="password"
-                      placeholder="Enter Access PIN (Default: 1234)"
+                      placeholder="Enter Access PIN"
                       value={adminPinInput}
                       onChange={(e) => setAdminPinInput(e.target.value)}
                       autoFocus
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 focus:outline-none focus:border-cyan-400"
+                      disabled={isAuthenticating}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-cyan-300 focus:outline-none focus:border-cyan-400 disabled:opacity-50"
                     />
                     {adminPinError && (
                       <p className="text-red-400 text-xs mt-1.5 text-center">{adminPinError}</p>
@@ -1553,8 +1539,9 @@
                   </div>
                   <button 
                     type="submit"
-                    className="w-full bg-gradient-to-r from-cyan-600 to-sky-500 hover:from-cyan-500 hover:to-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-sm transition shadow-lg shadow-cyan-600/30">
-                    Unlock Admin Tools
+                    disabled={isAuthenticating}
+                    className="w-full bg-gradient-to-r from-cyan-600 to-sky-500 hover:from-cyan-500 hover:to-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-sm transition shadow-lg shadow-cyan-600/30 disabled:opacity-50">
+                    {isAuthenticating ? 'Authenticating...' : 'Unlock Admin Tools'}
                   </button>
                 </form>
               </div>
