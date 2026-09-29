@@ -34,8 +34,11 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <!-- Canvas Confetti for Fanfare Effect -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Nunito:wght@400;600;700;800&display=swap');
     body {
       font-family: 'Nunito', sans-serif;
       background: radial-gradient(circle at 50% 0%, #0c4a6e 0%, #031828 100%);
@@ -52,6 +55,16 @@
     .glass-card-active {
       border-color: rgba(56, 189, 248, 0.55);
       box-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
+    }
+    .celebration-border {
+      background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #38bdf8);
+      background-size: 300% 300%;
+      animation: gradientShift 6s ease infinite;
+    }
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
     /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -73,6 +86,41 @@
 
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
+
+    // Helper: Confetti Cannon Trigger
+    function launchFanfareConfetti() {
+      if (typeof confetti !== 'function') return;
+
+      const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
+
+      // Left blast
+      confetti({
+        particleCount: 60,
+        angle: 60,
+        spread: 70,
+        origin: { x: 0.1, y: 0.7 },
+        colors: colors
+      });
+
+      // Right blast
+      confetti({
+        particleCount: 60,
+        angle: 120,
+        spread: 70,
+        origin: { x: 0.9, y: 0.7 },
+        colors: colors
+      });
+
+      // Center fountain
+      setTimeout(() => {
+        confetti({
+          particleCount: 90,
+          spread: 100,
+          origin: { y: 0.55 },
+          colors: colors
+        });
+      }, 250);
+    }
 
     // Helper: Universal Clickable Link Renderer for text fields
     function renderWithLinks(text) {
@@ -99,7 +147,7 @@
       });
     }
 
-    // Helper: Fixed CSV Parser that safely handles apostrophes in names (e.g. O'Sullivan)
+    // Helper: CSV Parser that handles standard double quotes and preserves apostrophes
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
@@ -110,7 +158,6 @@
         let inQuotes = false;
         for (let i = 0; i < rowStr.length; i++) {
           const char = rowStr[i];
-          // Standard CSV only escapes via double quotes ("), not single quotes (')
           if (char === '"') {
             inQuotes = !inQuotes;
           } else if (char === ',' && !inQuotes) {
@@ -128,38 +175,42 @@
 
       const catIdx = headers.findIndex(h => h.includes('cat') || h.includes('type') || h.includes('group') || h.includes('tier'));
       const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
-      const summerIdx = headers.findIndex(h => h.includes('summer') || h.includes('snow') || h.includes('cast a') || h.includes('cast 1'));
-      const winterIdx = headers.findIndex(h => h.includes('winter') || h.includes('ice') || h.includes('cast b') || h.includes('cast 2'));
+      const col2Idx = headers.findIndex(h => h.includes('summer') || h.includes('snow') || h.includes('cast a') || h.includes('actor') || h.includes('name'));
+      const col3Idx = headers.findIndex(h => h.includes('winter') || h.includes('ice') || h.includes('cast b'));
 
       const effectiveCatCol = catIdx !== -1 ? catIdx : 0;
       const effectiveRoleCol = roleIdx !== -1 ? roleIdx : 1;
-      const effectiveSummerCol = summerIdx !== -1 ? summerIdx : 2;
-      const effectiveWinterCol = winterIdx !== -1 ? winterIdx : 3;
+      const effectiveCol2 = col2Idx !== -1 ? col2Idx : 2;
+      const effectiveCol3 = col3Idx !== -1 ? col3Idx : 3;
 
       return lines.slice(1).map((line, rowIdx) => {
         const cols = parseRow(line);
         const category = cols[effectiveCatCol] || 'Company';
         const role = cols[effectiveRoleCol] || `Role #${rowIdx + 1}`;
-        const castSummer = cols[effectiveSummerCol] || 'TBD';
-        const castWinter = cols[effectiveWinterCol] || castSummer || 'TBD';
+        const valCol2 = cols[effectiveCol2] || '';
+        const valCol3 = cols[effectiveCol3] || '';
 
-        const isFeaturedEnsemble = category.toLowerCase().includes('featured ensemble') || 
-                                   role.toLowerCase().includes('featured ensemble');
+        const catLower = category.toLowerCase();
+        const roleLower = role.toLowerCase();
 
-        const isChorus = !isFeaturedEnsemble && (
-                         category.toLowerCase().includes('chorus') || 
-                         category.toLowerCase().includes('ensemble') || 
-                         role.toLowerCase().includes('chorus') || 
-                         role.toLowerCase().includes('ensemble'));
+        const isFeaturedEnsembleOrChorus = 
+          catLower.includes('featured ensemble') || 
+          roleLower.includes('featured ensemble') || 
+          catLower.includes('chorus') || 
+          roleLower.includes('chorus') || 
+          catLower.includes('ensemble') || 
+          roleLower.includes('ensemble');
+
+        // Extract actor name(s)
+        const actorNames = [valCol2, valCol3].filter(v => v && v.toLowerCase() !== 'tbd');
+        const actorName = actorNames.length > 0 ? actorNames.join(' / ') : 'Pending Casting';
 
         return {
           id: 'role-' + rowIdx,
           category,
           role,
-          castSummer: castSummer || 'TBD',
-          castWinter: castWinter || 'TBD',
-          isFeaturedEnsemble,
-          isChorus
+          actorName,
+          isFeaturedEnsembleOrChorus
         };
       }).filter(item => item.role.trim().length > 0 && item.role.toLowerCase() !== 'role');
     }
@@ -176,7 +227,7 @@
 
     const TAB_INFO = {
       callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
-      cast: { label: 'Summer & Winter Cast List', icon: '🎭', path: 'cast' },
+      cast: { label: 'Cast & Characters', icon: '🎭', path: 'cast' },
       music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
       calendar: { label: 'Master Calendar', icon: '🗓️', path: 'calendar' }
@@ -201,8 +252,11 @@
       const [castList, setCastList] = useState([]);
       const [isLoadingCast, setIsLoadingCast] = useState(true);
       const [castError, setCastError] = useState(null);
-      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL');
+      const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
+
+      // Celebration Fanfare Modal for Cast Members
+      const [celebrationTarget, setCelebrationTarget] = useState(null);
 
       // Call Types (with write-ins saved)
       const [callTypes, setCallTypes] = useState(() => {
@@ -368,16 +422,12 @@
 
       const selectAllGroup = (groupType) => {
         let tags = [];
-        if (groupType === 'ALL_SUMMER') {
-          tags = castList.filter(c => !c.isFeaturedEnsemble).map(c => c.isChorus ? `${c.role} (Both Casts)` : `${c.role} (Summer Cast)`);
-        } else if (groupType === 'ALL_WINTER') {
-          tags = castList.filter(c => !c.isFeaturedEnsemble).map(c => c.isChorus ? `${c.role} (Both Casts)` : `${c.role} (Winter Cast)`);
-        } else if (groupType === 'FULL_COMPANY') {
+        if (groupType === 'FULL_COMPANY') {
           tags = ['Full Cast & Company (All Members)'];
-        } else if (groupType === 'ALL_CHORUS') {
-          tags = castList.filter(c => c.isChorus).map(c => `${c.role} (Both Casts)`);
-        } else if (groupType === 'ALL_FEATURED') {
-          tags = castList.filter(c => c.isFeaturedEnsemble).map(c => `${c.role} (Featured Ensemble)`);
+        } else if (groupType === 'ALL_PRINCIPALS') {
+          tags = castList.filter(c => !c.isFeaturedEnsembleOrChorus).map(c => c.role);
+        } else if (groupType === 'ALL_ENSEMBLE') {
+          tags = castList.filter(c => c.isFeaturedEnsembleOrChorus).map(c => c.role);
         }
         const merged = Array.from(new Set([...editCallData.calledRoles, ...tags]));
         setEditCallData({ ...editCallData, calledRoles: merged });
@@ -385,6 +435,12 @@
 
       const clearAllRoles = () => {
         setEditCallData({ ...editCallData, calledRoles: [] });
+      };
+
+      // Open celebration modal and fire confetti
+      const openCelebration = (item) => {
+        setCelebrationTarget(item);
+        launchFanfareConfetti();
       };
 
       // Save rehearsal call & post to Google Sheet backend
@@ -467,20 +523,22 @@
         });
       }, [rehearsals, callSearchRole]);
 
-      const { mainCast, featuredEnsembleCast } = useMemo(() => {
-        const q = castFilterQuery.toLowerCase();
-        const filtered = castList.filter(item => 
-          item.role.toLowerCase().includes(q) ||
-          item.castSummer.toLowerCase().includes(q) ||
-          item.castWinter.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q)
-        );
+      // Category breakdown & filtered list for cards
+      const availableCategories = useMemo(() => {
+        const cats = Array.from(new Set(castList.map(c => c.category || 'Company')));
+        return ['ALL', ...cats];
+      }, [castList]);
 
-        return {
-          mainCast: filtered.filter(item => !item.isFeaturedEnsemble),
-          featuredEnsembleCast: filtered.filter(item => item.isFeaturedEnsemble)
-        };
-      }, [castList, castFilterQuery]);
+      const filteredCards = useMemo(() => {
+        const q = castFilterQuery.toLowerCase();
+        return castList.filter(item => {
+          const matchesQuery = item.role.toLowerCase().includes(q) || 
+                               item.actorName.toLowerCase().includes(q) || 
+                               item.category.toLowerCase().includes(q);
+          const matchesCategory = selectedCategoryFilter === 'ALL' || item.category === selectedCategoryFilter;
+          return matchesQuery && matchesCategory;
+        });
+      }, [castList, castFilterQuery, selectedCategoryFilter]);
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -498,7 +556,7 @@
                   FROZEN JR.
                 </h1>
                 <p className="text-xs md:text-sm text-cyan-200/70">
-                  Rehearsal Call Board • Tracks • Live Summer & Winter Cast Hub
+                  Rehearsal Call Board • Tracks • Production Portal
                 </p>
               </div>
             </div>
@@ -574,7 +632,7 @@
                   <div className="relative">
                     <input 
                       type="text"
-                      placeholder="Filter by character or cast (e.g., Elsa, Summer Cast, Chorus)..."
+                      placeholder="Filter by character or role..."
                       value={callSearchRole}
                       onChange={(e) => setCallSearchRole(e.target.value)}
                       className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
@@ -656,34 +714,21 @@
                       <div className="grid md:grid-cols-2 gap-4 text-sm">
                         <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
                           <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5">👥 Called Roles & Casts:</span>
+                            <span className="flex items-center gap-1.5">👥 Called Roles:</span>
                             <span className="text-[10px] text-slate-400 font-normal">
                               {Array.isArray(reh.calledRoles) ? `${reh.calledRoles.length} called` : ''}
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
                             {Array.isArray(reh.calledRoles) && reh.calledRoles.length > 0 ? (
-                              reh.calledRoles.map((roleTag, i) => {
-                                const isSummer = roleTag.includes('(Summer Cast)') || roleTag.includes('(Snow Cast)');
-                                const isWinter = roleTag.includes('(Winter Cast)') || roleTag.includes('(Ice Cast)');
-                                const isFeatured = roleTag.includes('(Featured Ensemble)');
-                                const isBoth = roleTag.includes('(Both Casts)') || roleTag.includes('Full Cast') || roleTag.includes('Company');
-
-                                return (
-                                  <span 
-                                    key={i} 
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                                      isSummer ? 'bg-amber-950/80 text-amber-200 border-amber-800' :
-                                      isWinter ? 'bg-sky-950/80 text-sky-200 border-sky-800' :
-                                      isFeatured ? 'bg-purple-950/80 text-purple-200 border-purple-800' :
-                                      isBoth ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40' :
-                                      'bg-slate-800 text-slate-200 border-slate-700'
-                                    }`}
-                                  >
-                                    {roleTag}
-                                  </span>
-                                );
-                              })
+                              reh.calledRoles.map((roleTag, i) => (
+                                <span 
+                                  key={i} 
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-cyan-500/20 text-cyan-200 border-cyan-500/40"
+                                >
+                                  {roleTag}
+                                </span>
+                              ))
                             ) : (
                               <span className="text-slate-400 italic text-xs">No specific roles selected.</span>
                             )}
@@ -753,20 +798,41 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: LIVE GOOGLE SHEET CAST LIST (SUMMER & WINTER)     */}
+          {/* TAB 2: LIVE CAST & CHARACTERS (CARD-BASED VIEW)          */}
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
+              {/* Top Informational Note Card */}
+              <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-cyan-950/60 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-2xl shrink-0 shadow-lg">
+                    ✨
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest bg-purple-950 text-purple-300 px-2.5 py-0.5 rounded border border-purple-700/60">
+                      Casting & Role Assignment Notice
+                    </span>
+                    <h3 className="font-cinzel font-bold text-white text-base md:text-lg mt-1">
+                      Cast & Ensemble Assignments
+                    </h3>
+                    <p className="text-xs md:text-sm text-purple-100/90 mt-1.5 leading-relaxed font-medium">
+                      Featured ensemble roles have lines. Which featured ensemble member each actor will play will be assigned in rehearsals. Which set of shows the featured ensemble members and chorus will be assigned to will also be decided during rehearsals.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sync Status Banner */}
               <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-cyan-400">
                 <div className="flex items-center gap-3">
-                  <div className="text-2xl shrink-0">📊</div>
+                  <div className="text-2xl shrink-0">📸</div>
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                      Live Cast Roster Synchronized
+                      Tap Any Card to Celebrate!
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Directly powered by your Google Sheet. Chorus & Ensemble members perform in both casts.
+                      Click your performer's card to launch fanfare and celebration confetti for screen photos.
                     </p>
                   </div>
                 </div>
@@ -783,169 +849,180 @@
                 </div>
               </div>
 
+              {/* Filter Toolbar */}
               <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="w-full md:w-72">
+                <div className="w-full md:w-80">
                   <input
                     type="text"
-                    placeholder="Search actor or character..."
+                    placeholder="Search actor or character role..."
                     value={castFilterQuery}
                     onChange={(e) => setCastFilterQuery(e.target.value)}
                     className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-3.5 py-2 text-xs text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
                   />
                 </div>
 
-                <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-cyan-900/60 shrink-0">
-                  <button
-                    onClick={() => setSelectedCastGroup('ALL')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                      selectedCastGroup === 'ALL' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Both Casts ({mainCast.length})
-                  </button>
-                  <button
-                    onClick={() => setSelectedCastGroup('SUMMER')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                      selectedCastGroup === 'SUMMER' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    ☀️ Summer Cast
-                  </button>
-                  <button
-                    onClick={() => setSelectedCastGroup('WINTER')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                      selectedCastGroup === 'WINTER' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    ❄️ Winter Cast
-                  </button>
+                <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+                  {availableCategories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategoryFilter(cat)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${
+                        selectedCategoryFilter === cat 
+                          ? 'bg-cyan-600 text-white shadow-md' 
+                          : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {cat === 'ALL' ? 'All Roles' : cat}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Main Dual Cast Table */}
-              <div className="glass-card rounded-2xl overflow-hidden shadow-2xl">
-                {isLoadingCast && castList.length === 0 ? (
-                  <div className="p-12 text-center text-cyan-300">
-                    <div className="text-4xl animate-bounce mb-3">❄️</div>
-                    <p className="font-cinzel text-lg">Fetching Latest Cast From Google Sheets...</p>
-                  </div>
-                ) : castError && castList.length === 0 ? (
-                  <div className="p-8 text-center text-amber-300">
-                    <p className="font-bold">{castError}</p>
-                    <button onClick={loadLiveCast} className="mt-3 bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs">
-                      Try Again
-                    </button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-900/90 text-cyan-300 text-xs uppercase font-cinzel tracking-wider border-b border-cyan-900/50">
-                        <tr>
-                          <th className="py-3.5 px-4">Role / Character</th>
-                          <th className="py-3.5 px-4">Category</th>
-                          {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SUMMER') && (
-                            <th className="py-3.5 px-4 text-amber-300 font-extrabold tracking-wide">☀️ Summer Cast</th>
-                          )}
-                          {(selectedCastGroup === 'ALL' || selectedCastGroup === 'WINTER') && (
-                            <th className="py-3.5 px-4 text-sky-300 font-extrabold tracking-wide">❄️ Winter Cast</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-sans">
-                        {mainCast.map((member) => (
-                          <tr 
-                            key={member.id} 
-                            className={member.isChorus ? 'bg-cyan-950/20 hover:bg-cyan-950/40 transition' : 'hover:bg-slate-800/40 transition'}
-                          >
-                            <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
-                              <span>{member.isChorus ? '❄️' : '🎭'}</span> 
-                              <span>{member.role}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                                member.category.toLowerCase().includes('lead') ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
-                                member.category.toLowerCase().includes('principal') ? 'bg-blue-950 text-blue-300 border border-blue-800' :
-                                member.isChorus ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                                'bg-slate-800 text-slate-300'
-                              }`}>
-                                {member.category || 'Company'}
-                              </span>
-                            </td>
-                            {(selectedCastGroup === 'ALL' || selectedCastGroup === 'SUMMER') && (
-                              <td className="py-3 px-4 font-semibold text-slate-200">
-                                {member.isChorus ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
-                                    <span>✨</span> {member.castSummer || 'In Both Casts'}
-                                  </span>
-                                ) : (
-                                  <span>{member.castSummer}</span>
-                                )}
-                              </td>
-                            )}
-                            {(selectedCastGroup === 'ALL' || selectedCastGroup === 'WINTER') && (
-                              <td className="py-3 px-4 font-semibold text-slate-200">
-                                {member.isChorus ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
-                                    <span>✨</span> {member.castWinter || 'In Both Casts'}
-                                  </span>
-                                ) : (
-                                  <span>{member.castWinter}</span>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              {/* Card-Based Cast Roster */}
+              {isLoadingCast && castList.length === 0 ? (
+                <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
+                  <div className="text-4xl animate-bounce mb-3">❄️</div>
+                  <p className="font-cinzel text-lg">Fetching Latest Cast From Google Sheets...</p>
+                </div>
+              ) : castError && castList.length === 0 ? (
+                <div className="glass-card p-8 text-center text-amber-300 rounded-3xl">
+                  <p className="font-bold">{castError}</p>
+                  <button onClick={loadLiveCast} className="mt-3 bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs">
+                    Try Again
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredCards.map((item) => {
+                    const isEnsemble = item.isFeaturedEnsembleOrChorus;
+                    const catBadge = item.category || (isEnsemble ? 'Ensemble' : 'Lead');
 
-              {/* FEATURED ENSEMBLE SECTION */}
-              {featuredEnsembleCast.length > 0 && (
-                <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/30">
-                  <div className="bg-purple-950/70 p-4 border-b border-purple-800/50 flex items-start gap-3">
-                    <span className="text-2xl shrink-0">✨</span>
-                    <div>
-                      <h3 className="font-cinzel font-bold text-white text-base">Featured Ensemble Roles</h3>
-                      <p className="text-xs text-purple-200/90 mt-0.5">
-                        These roles will be assigned during the rehearsal process in a way that makes sense. Performers in these parts are not assigned to either the Summer or Winter cast exclusively.
-                      </p>
+                    return (
+                      <div 
+                        key={item.id}
+                        onClick={() => openCelebration(item)}
+                        className={`glass-card p-5 rounded-2xl flex flex-col justify-between cursor-pointer transition-all duration-200 transform hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-cyan-500/20 active:scale-95 group ${
+                          isEnsemble ? 'border-purple-500/30 bg-purple-950/20 hover:border-purple-400' : 'border-cyan-500/20 hover:border-cyan-400'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border transition ${
+                              isEnsemble 
+                                ? 'bg-purple-950/80 text-purple-300 border-purple-800/80 group-hover:bg-purple-900' 
+                                : 'bg-cyan-950 text-cyan-300 border-cyan-800 group-hover:bg-cyan-900'
+                            }`}>
+                              {catBadge}
+                            </span>
+                            <span className="text-sm group-hover:scale-125 transition-transform">
+                              {isEnsemble ? '✨' : '🎭'}
+                            </span>
+                          </div>
+
+                          <h3 className="text-lg font-bold text-white font-cinzel tracking-wide leading-snug group-hover:text-cyan-200 transition-colors">
+                            {item.role}
+                          </h3>
+                        </div>
+
+                        <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                          <span className="text-slate-400 font-semibold">Performer:</span>
+                          <span className="font-bold text-cyan-200 group-hover:text-white truncate ml-2">
+                            {item.actorName}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
+                          <span>🎉 Tap to celebrate</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* CELEBRATION PHOTO-OP FANFARE MODAL                       */}
+          {/* ======================================================== */}
+          {celebrationTarget && (
+            <div 
+              className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+              onClick={() => setCelebrationTarget(null)}
+            >
+              <div 
+                className="max-w-md w-full celebration-border p-1 rounded-3xl shadow-2xl relative animate-in fade-in zoom-in duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-slate-950/95 rounded-[22px] p-6 md:p-8 text-center flex flex-col items-center relative overflow-hidden">
+                  
+                  {/* Close button */}
+                  <button 
+                    onClick={() => setCelebrationTarget(null)}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-900/80 hover:bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center text-sm transition"
+                  >
+                    ✕
+                  </button>
+
+                  {/* Fanfare Medallion */}
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600 via-sky-400 to-indigo-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-500/40 mb-4 border border-white/20">
+                    ❄️
+                  </div>
+
+                  <span className="text-xs uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full mb-3">
+                    FROZEN JR. • OFFICIAL CASTING
+                  </span>
+
+                  <h4 className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
+                    Congratulations to
+                  </h4>
+
+                  <h2 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-white to-cyan-200 tracking-wide mt-1 mb-4">
+                    {celebrationTarget.actorName}
+                  </h2>
+
+                  {/* Character banner badge */}
+                  <div className="w-full bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border border-cyan-500/40 p-4 rounded-2xl mb-4 shadow-inner">
+                    <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest block mb-1">
+                      Cast in the Role of
+                    </span>
+                    <span className="text-xl md:text-2xl font-cinzel font-black text-cyan-300">
+                      {celebrationTarget.role}
+                    </span>
+                    <div className="mt-1.5 inline-block text-[10px] uppercase font-bold text-slate-400 bg-slate-950/80 px-2.5 py-0.5 rounded border border-slate-800">
+                      {celebrationTarget.category || 'Company'}
                     </div>
                   </div>
 
-                  <div className="p-4 overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-900/60 text-purple-300 text-xs uppercase font-cinzel tracking-wider border-b border-purple-900/40">
-                        <tr>
-                          <th className="py-3 px-4">Role / Group</th>
-                          <th className="py-3 px-4">Category</th>
-                          <th className="py-3 px-4">Assignment Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {featuredEnsembleCast.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-800/30 transition">
-                            <td className="py-3 px-4 font-bold text-white flex items-center gap-2">
-                              <span>🌟</span> {item.role}
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
-                                {item.category}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-xs font-semibold text-slate-300">
-                              <span className="inline-flex items-center gap-1.5 bg-slate-900/90 text-purple-200 px-2.5 py-1 rounded-lg border border-purple-900/60">
-                                <span>⏳</span> Assigned during rehearsals
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <p className="text-xs text-cyan-200/80 italic mb-6 leading-relaxed">
+                    "Some people are worth melting for." ❄️ Good luck in rehearsals!
+                  </p>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
+                    <button
+                      type="button"
+                      onClick={launchFanfareConfetti}
+                      className="w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-slate-950 font-black py-2.5 rounded-xl text-xs md:text-sm shadow-lg shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      <span>🎉</span>
+                      <span>Celebrate Again!</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCelebrationTarget(null)}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold py-2.5 rounded-xl text-xs border border-slate-800 transition"
+                    >
+                      Close Card
+                    </button>
+                  </div>
+
+                  <div className="mt-4 text-[10px] text-slate-500">
+                    📸 Perfect photo opportunity! Take a screenshot to share with family & friends.
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -1130,7 +1207,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* MODAL: POST / EDIT REHEARSAL CALL WITH ADVANCED PICKER   */}
+          {/* MODAL: POST / EDIT REHEARSAL CALL                        */}
           {/* ======================================================== */}
           {isEditingCall && (
             <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -1225,12 +1302,12 @@
                     </div>
                   </div>
 
-                  {/* MULTI-SELECT CHARACTER LIST WITH GRANULAR SUMMER / WINTER / FEATURED CAST TOGGLES */}
+                  {/* MULTI-SELECT CHARACTER LIST */}
                   <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                       <div>
                         <label className="block text-cyan-300 font-bold text-sm">Select Who is Called</label>
-                        <p className="text-[11px] text-slate-400">Choose Summer Cast, Winter Cast, Both, or Featured Ensemble</p>
+                        <p className="text-[11px] text-slate-400">Select individual characters or full groups</p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -1243,31 +1320,17 @@
                         </button>
                         <button
                           type="button"
-                          onClick={() => selectAllGroup('ALL_SUMMER')}
-                          className="bg-amber-950 hover:bg-amber-900 text-amber-300 text-[10px] font-bold px-2 py-1 rounded border border-amber-800"
-                        >
-                          + All Summer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => selectAllGroup('ALL_WINTER')}
+                          onClick={() => selectAllGroup('ALL_PRINCIPALS')}
                           className="bg-sky-950 hover:bg-sky-900 text-sky-300 text-[10px] font-bold px-2 py-1 rounded border border-sky-800"
                         >
-                          + All Winter
+                          + Principals
                         </button>
                         <button
                           type="button"
-                          onClick={() => selectAllGroup('ALL_CHORUS')}
-                          className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded border border-emerald-800"
-                        >
-                          + All Chorus
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => selectAllGroup('ALL_FEATURED')}
+                          onClick={() => selectAllGroup('ALL_ENSEMBLE')}
                           className="bg-purple-950 hover:bg-purple-900 text-purple-300 text-[10px] font-bold px-2 py-1 rounded border border-purple-800"
                         >
-                          + Featured Ens
+                          + All Ensemble
                         </button>
                         <button
                           type="button"
@@ -1281,115 +1344,26 @@
 
                     <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
                       {castList.map((item) => {
-                        const summerTag = `${item.role} (Summer Cast)`;
-                        const winterTag = `${item.role} (Winter Cast)`;
-                        const bothTag = `${item.role} (Both Casts)`;
-                        const featuredTag = `${item.role} (Featured Ensemble)`;
-
-                        const isSummerSelected = editCallData.calledRoles.includes(summerTag);
-                        const isWinterSelected = editCallData.calledRoles.includes(winterTag);
-                        const isBothSelected = editCallData.calledRoles.includes(bothTag);
-                        const isFeaturedSelected = editCallData.calledRoles.includes(featuredTag);
+                        const isSelected = editCallData.calledRoles.includes(item.role);
 
                         return (
-                          <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700">
+                          <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700">
                             <div>
                               <span className="font-bold text-white text-xs">{item.role}</span>
-                              <span className="text-[10px] text-slate-400 ml-2">({item.category})</span>
+                              <span className="text-[10px] text-slate-400 ml-2">({item.actorName})</span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {item.isFeaturedEnsemble ? (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleCalledRole(featuredTag)}
-                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                                    isFeaturedSelected
-                                      ? 'bg-purple-500 text-slate-950 font-black shadow-md'
-                                      : 'bg-slate-800 text-purple-300 hover:bg-slate-700'
-                                  }`}
-                                >
-                                  {isFeaturedSelected ? '✓ Called (Featured Ensemble)' : '+ Call Featured'}
-                                </button>
-                              ) : item.isChorus ? (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleCalledRole(bothTag)}
-                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                                    isBothSelected
-                                      ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
-                                      : 'bg-slate-800 text-emerald-300 hover:bg-slate-700'
-                                  }`}
-                                >
-                                  {isBothSelected ? '✓ Called (In Both Casts)' : '+ Call Chorus'}
-                                </button>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      let cur = [...editCallData.calledRoles];
-                                      if (isBothSelected) {
-                                        cur = cur.filter(t => t !== bothTag);
-                                      } else {
-                                        cur = cur.filter(t => t !== summerTag && t !== winterTag);
-                                        cur.push(bothTag);
-                                      }
-                                      setEditCallData({ ...editCallData, calledRoles: cur });
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
-                                      isBothSelected
-                                        ? 'bg-cyan-500 text-slate-950 font-black'
-                                        : 'bg-slate-800 text-cyan-300 hover:bg-slate-700'
-                                    }`}
-                                  >
-                                    Both
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      let cur = editCallData.calledRoles.filter(t => t !== bothTag);
-                                      if (cur.includes(summerTag)) {
-                                        cur = cur.filter(t => t !== summerTag);
-                                      } else {
-                                        cur.push(summerTag);
-                                      }
-                                      setEditCallData({ ...editCallData, calledRoles: cur });
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
-                                      isSummerSelected && !isBothSelected
-                                        ? 'bg-amber-500 text-slate-950 font-black'
-                                        : 'bg-slate-800 text-amber-300 hover:bg-slate-700'
-                                    }`}
-                                    title={item.castSummer ? `Summer Actor: ${item.castSummer}` : 'Summer Cast'}
-                                  >
-                                    ☀️ Summer ({item.castSummer || 'TBD'})
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      let cur = editCallData.calledRoles.filter(t => t !== bothTag);
-                                      if (cur.includes(winterTag)) {
-                                        cur = cur.filter(t => t !== winterTag);
-                                      } else {
-                                        cur.push(winterTag);
-                                      }
-                                      setEditCallData({ ...editCallData, calledRoles: cur });
-                                    }}
-                                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
-                                      isWinterSelected && !isBothSelected
-                                        ? 'bg-sky-500 text-slate-950 font-black'
-                                        : 'bg-slate-800 text-sky-300 hover:bg-slate-700'
-                                    }`}
-                                    title={item.castWinter ? `Winter Actor: ${item.castWinter}` : 'Winter Cast'}
-                                  >
-                                    ❄️ Winter ({item.castWinter || 'TBD'})
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleCalledRole(item.role)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                isSelected
+                                  ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
+                                  : 'bg-slate-800 text-cyan-300 hover:bg-slate-700'
+                              }`}
+                            >
+                              {isSelected ? '✓ Called' : '+ Add'}
+                            </button>
                           </div>
                         );
                       })}
@@ -1447,7 +1421,7 @@
 
           <footer className="mt-12 text-center text-xs text-slate-500 border-t border-slate-800/80 pt-6">
             <p>Frozen JR. • Community Youth Theater Production Portal</p>
-            <p className="mt-1">Live Cast Sync • Summer & Winter Schedules • Master Calendar • YouTube Rehearsal Vault</p>
+            <p className="mt-1">Live Cast Sync • Rehearsal Call Board • Master Calendar • YouTube Rehearsal Vault</p>
           </footer>
         </div>
       );
