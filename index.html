@@ -293,6 +293,16 @@
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
+      // Track which card IDs have been revealed during this session
+      const [revealedCardIds, setRevealedCardIds] = useState(() => {
+        try {
+          const saved = sessionStorage.getItem('frozen_revealed_cards');
+          return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+          return [];
+        }
+      });
+
       const [celebrationTarget, setCelebrationTarget] = useState(null);
 
       const [callTypes, setCallTypes] = useState(() => {
@@ -401,6 +411,12 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
+      useEffect(() => {
+        try {
+          sessionStorage.setItem('frozen_revealed_cards', JSON.stringify(revealedCardIds));
+        } catch (e) {}
+      }, [revealedCardIds]);
+
       const handleLogin = (e) => {
         e.preventDefault();
         if (adminPinInput === adminPin) {
@@ -469,7 +485,11 @@
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
 
+      // Mark card as revealed for this session, open modal, and fire confetti
       const openCelebration = (item) => {
+        if (!revealedCardIds.includes(item.id)) {
+          setRevealedCardIds(prev => [...prev, item.id]);
+        }
         setCelebrationTarget(item);
         launchFanfareConfetti();
       };
@@ -827,7 +847,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: LIVE ACTOR CARDS (ACTOR-FIRST SPOTLIGHT)          */}
+          {/* TAB 2: LIVE ACTOR CARDS (MYSTERY UNTIL CLICKED)          */}
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
@@ -845,7 +865,7 @@
                       Cast & Ensemble Assignments
                     </h3>
                     <p className="text-xs md:text-sm text-purple-100/90 mt-1.5 leading-relaxed font-medium">
-                      There will be two full casts of Frozen Jr. Which cast each actor will belong to will depend on availability. Featured ensemble roles have lines. Which featured ensemble role each actor will play will be assigned in rehearsals.
+                      There will be two full casts of Frozen Jr. Which cast each actor will belong to will depend on availability. Featured ensemble roles have lines. Which featured ensemble member each actor will play will be assigned in rehearsals.
                     </p>
                   </div>
                 </div>
@@ -854,14 +874,14 @@
               {/* Sync Status Banner */}
               <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-cyan-400">
                 <div className="flex items-center gap-3">
-                  <div className="text-2xl shrink-0">📸</div>
+                  <div className="text-2xl shrink-0">🎁</div>
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                      Tap Your Card to Celebrate!
+                      Mystery Reveal Cards
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Tap your name card to trigger a celebration fanfare and confetti screen for family photos.
+                      Roles are hidden until tapped! Once opened during your session, the role stays revealed.
                     </p>
                   </div>
                 </div>
@@ -907,7 +927,7 @@
                 </div>
               </div>
 
-              {/* ACTOR-FIRST CARDS ROSTER */}
+              {/* ACTOR-FIRST MYSTERY CARDS ROSTER */}
               {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
@@ -925,6 +945,7 @@
                   {filteredActorCards.map((item) => {
                     const isEnsemble = item.isFeaturedEnsembleOrChorus;
                     const catBadge = item.category || (isEnsemble ? 'Ensemble' : 'Lead');
+                    const isRevealed = revealedCardIds.includes(item.id);
 
                     return (
                       <div 
@@ -954,15 +975,22 @@
                           </h3>
                         </div>
 
-                        {/* ASSIGNED ROLE */}
+                        {/* ASSIGNED ROLE (MYSTERY UNTIL REVEALED) */}
                         <div className="mt-4 pt-3 border-t border-slate-800/80">
                           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
                             Assigned Role:
                           </div>
-                          <div className="text-sm font-extrabold text-cyan-300 group-hover:text-cyan-100 flex items-center gap-1.5">
-                            <span>❄️</span>
-                            <span className="leading-snug">{item.role}</span>
-                          </div>
+                          {isRevealed ? (
+                            <div className="text-sm font-extrabold text-cyan-300 group-hover:text-cyan-100 flex items-center gap-1.5 animate-in fade-in duration-300">
+                              <span>❄️</span>
+                              <span className="leading-snug">{item.role}</span>
+                            </div>
+                          ) : (
+                            <div className="text-xs font-bold text-cyan-400/70 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 mt-0.5 group-hover:border-cyan-500 group-hover:text-cyan-300">
+                              <span>🎁</span>
+                              <span>Tap card to reveal role!</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-3 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
@@ -977,7 +1005,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* CELEBRATION PHOTO-OP FANFARE MODAL (ACTOR-FIRST)         */}
+          {/* CELEBRATION PHOTO-OP FANFARE MODAL                       */}
           {/* ======================================================== */}
           {celebrationTarget && (
             <div 
