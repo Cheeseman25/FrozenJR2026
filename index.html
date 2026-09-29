@@ -93,7 +93,6 @@
 
       const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
 
-      // Left blast
       confetti({
         particleCount: 60,
         angle: 60,
@@ -102,7 +101,6 @@
         colors: colors
       });
 
-      // Right blast
       confetti({
         particleCount: 60,
         angle: 120,
@@ -111,7 +109,6 @@
         colors: colors
       });
 
-      // Center fountain
       setTimeout(() => {
         confetti({
           particleCount: 90,
@@ -183,7 +180,9 @@
       const effectiveCol2 = col2Idx !== -1 ? col2Idx : 2;
       const effectiveCol3 = col3Idx !== -1 ? col3Idx : 3;
 
-      return lines.slice(1).map((line, rowIdx) => {
+      const rawItems = [];
+
+      lines.slice(1).forEach((line, rowIdx) => {
         const cols = parseRow(line);
         const category = cols[effectiveCatCol] || 'Company';
         const role = cols[effectiveRoleCol] || `Role #${rowIdx + 1}`;
@@ -201,18 +200,60 @@
           catLower.includes('ensemble') || 
           roleLower.includes('ensemble');
 
-        // Extract actor name(s)
-        const actorNames = [valCol2, valCol3].filter(v => v && v.toLowerCase() !== 'tbd');
-        const actorName = actorNames.length > 0 ? actorNames.join(' / ') : 'Pending Casting';
+        // Extract individual actor names
+        const actors = [valCol2, valCol3]
+          .map(v => v.trim())
+          .filter(v => v && v.toLowerCase() !== 'tbd');
 
-        return {
-          id: 'role-' + rowIdx,
-          category,
-          role,
-          actorName,
-          isFeaturedEnsembleOrChorus
-        };
-      }).filter(item => item.role.trim().length > 0 && item.role.toLowerCase() !== 'role');
+        if (actors.length === 0) {
+          rawItems.push({
+            id: 'actor-unassigned-' + rowIdx,
+            actorName: 'Pending Assignment',
+            role,
+            category,
+            isFeaturedEnsembleOrChorus
+          });
+        } else {
+          actors.forEach((act, actIdx) => {
+            rawItems.push({
+              id: `actor-${rowIdx}-${actIdx}`,
+              actorName: act,
+              role,
+              category,
+              isFeaturedEnsembleOrChorus
+            });
+          });
+        }
+      });
+
+      // Group by actor name so each actor has one unified card with all their roles
+      const actorMap = new Map();
+      rawItems.forEach(item => {
+        const key = item.actorName.toLowerCase().trim();
+        if (!actorMap.has(key)) {
+          actorMap.set(key, {
+            id: item.id,
+            actorName: item.actorName,
+            roles: [item.role],
+            categories: [item.category],
+            isFeaturedEnsembleOrChorus: item.isFeaturedEnsembleOrChorus
+          });
+        } else {
+          const existing = actorMap.get(key);
+          if (!existing.roles.includes(item.role)) {
+            existing.roles.push(item.role);
+          }
+          if (!existing.categories.includes(item.category)) {
+            existing.categories.push(item.category);
+          }
+        }
+      });
+
+      return Array.from(actorMap.values()).map(a => ({
+        ...a,
+        role: a.roles.join(', '),
+        category: a.categories.join(' / ')
+      }));
     }
 
     const INITIAL_CALL_TYPES = [
@@ -227,7 +268,7 @@
 
     const TAB_INFO = {
       callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
-      cast: { label: 'Cast & Characters', icon: '🎭', path: 'cast' },
+      cast: { label: 'Cast Members', icon: '🎭', path: 'cast' },
       music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
       calendar: { label: 'Master Calendar', icon: '🗓️', path: 'calendar' }
@@ -248,8 +289,8 @@
       const [adminPinError, setAdminPinError] = useState('');
       const [adminPin] = useState('1234');
 
-      // Live Google Sheet Cast State
-      const [castList, setCastList] = useState([]);
+      // Live Google Sheet Cast State (Actor-Centric)
+      const [actorList, setActorList] = useState([]);
       const [isLoadingCast, setIsLoadingCast] = useState(true);
       const [castError, setCastError] = useState(null);
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
@@ -322,7 +363,7 @@
           const text = await res.text();
           const parsed = parseCSV(text);
           if (parsed.length > 0) {
-            setCastList(parsed);
+            setActorList(parsed);
           } else {
             setCastError("Spreadsheet returned no data rows yet.");
           }
@@ -425,9 +466,9 @@
         if (groupType === 'FULL_COMPANY') {
           tags = ['Full Cast & Company (All Members)'];
         } else if (groupType === 'ALL_PRINCIPALS') {
-          tags = castList.filter(c => !c.isFeaturedEnsembleOrChorus).map(c => c.role);
+          tags = actorList.filter(c => !c.isFeaturedEnsembleOrChorus).map(c => `${c.actorName} (${c.role})`);
         } else if (groupType === 'ALL_ENSEMBLE') {
-          tags = castList.filter(c => c.isFeaturedEnsembleOrChorus).map(c => c.role);
+          tags = actorList.filter(c => c.isFeaturedEnsembleOrChorus).map(c => `${c.actorName} (${c.role})`);
         }
         const merged = Array.from(new Set([...editCallData.calledRoles, ...tags]));
         setEditCallData({ ...editCallData, calledRoles: merged });
@@ -523,22 +564,22 @@
         });
       }, [rehearsals, callSearchRole]);
 
-      // Category breakdown & filtered list for cards
+      // Category breakdown & filtered list for actor cards
       const availableCategories = useMemo(() => {
-        const cats = Array.from(new Set(castList.map(c => c.category || 'Company')));
+        const cats = Array.from(new Set(actorList.map(c => c.category || 'Company')));
         return ['ALL', ...cats];
-      }, [castList]);
+      }, [actorList]);
 
-      const filteredCards = useMemo(() => {
+      const filteredActorCards = useMemo(() => {
         const q = castFilterQuery.toLowerCase();
-        return castList.filter(item => {
-          const matchesQuery = item.role.toLowerCase().includes(q) || 
-                               item.actorName.toLowerCase().includes(q) || 
+        return actorList.filter(item => {
+          const matchesQuery = item.actorName.toLowerCase().includes(q) || 
+                               item.role.toLowerCase().includes(q) || 
                                item.category.toLowerCase().includes(q);
           const matchesCategory = selectedCategoryFilter === 'ALL' || item.category === selectedCategoryFilter;
           return matchesQuery && matchesCategory;
         });
-      }, [castList, castFilterQuery, selectedCategoryFilter]);
+      }, [actorList, castFilterQuery, selectedCategoryFilter]);
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -632,7 +673,7 @@
                   <div className="relative">
                     <input 
                       type="text"
-                      placeholder="Filter by character or role..."
+                      placeholder="Filter by actor or character role..."
                       value={callSearchRole}
                       onChange={(e) => setCallSearchRole(e.target.value)}
                       className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
@@ -714,7 +755,7 @@
                       <div className="grid md:grid-cols-2 gap-4 text-sm">
                         <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
                           <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5">👥 Called Roles:</span>
+                            <span className="flex items-center gap-1.5">👥 Called Performers:</span>
                             <span className="text-[10px] text-slate-400 font-normal">
                               {Array.isArray(reh.calledRoles) ? `${reh.calledRoles.length} called` : ''}
                             </span>
@@ -730,7 +771,7 @@
                                 </span>
                               ))
                             ) : (
-                              <span className="text-slate-400 italic text-xs">No specific roles selected.</span>
+                              <span className="text-slate-400 italic text-xs">No specific performers selected.</span>
                             )}
                           </div>
                         </div>
@@ -798,11 +839,11 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: LIVE CAST & CHARACTERS (CARD-BASED VIEW)          */}
+          {/* TAB 2: LIVE ACTOR CARDS (ACTOR-FIRST SPOTLIGHT)         */}
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
-              {/* Top Informational Note Card */}
+              {/* TOP INFORMATIONAL NOTE CARD */}
               <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-cyan-950/60 p-5">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-2xl shrink-0 shadow-lg">
@@ -828,11 +869,11 @@
                   <div className="text-2xl shrink-0">📸</div>
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                      Tap Any Card to Celebrate!
+                      Tap Your Card to Celebrate!
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Click your performer's card to launch fanfare and celebration confetti for screen photos.
+                      Tap your name card to trigger a celebration fanfare and confetti screen for family photos.
                     </p>
                   </div>
                 </div>
@@ -854,7 +895,7 @@
                 <div className="w-full md:w-80">
                   <input
                     type="text"
-                    placeholder="Search actor or character role..."
+                    placeholder="Search performer or character..."
                     value={castFilterQuery}
                     onChange={(e) => setCastFilterQuery(e.target.value)}
                     className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-3.5 py-2 text-xs text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
@@ -872,19 +913,19 @@
                           : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
                       }`}
                     >
-                      {cat === 'ALL' ? 'All Roles' : cat}
+                      {cat === 'ALL' ? 'All Cast' : cat}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Card-Based Cast Roster */}
-              {isLoadingCast && castList.length === 0 ? (
+              {/* ACTOR-FIRST CARDS ROSTER */}
+              {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
                   <p className="font-cinzel text-lg">Fetching Latest Cast From Google Sheets...</p>
                 </div>
-              ) : castError && castList.length === 0 ? (
+              ) : castError && actorList.length === 0 ? (
                 <div className="glass-card p-8 text-center text-amber-300 rounded-3xl">
                   <p className="font-bold">{castError}</p>
                   <button onClick={loadLiveCast} className="mt-3 bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs">
@@ -893,7 +934,7 @@
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredCards.map((item) => {
+                  {filteredActorCards.map((item) => {
                     const isEnsemble = item.isFeaturedEnsembleOrChorus;
                     const catBadge = item.category || (isEnsemble ? 'Ensemble' : 'Lead');
 
@@ -906,7 +947,7 @@
                         }`}
                       >
                         <div>
-                          <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center justify-between gap-2 mb-2">
                             <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border transition ${
                               isEnsemble 
                                 ? 'bg-purple-950/80 text-purple-300 border-purple-800/80 group-hover:bg-purple-900' 
@@ -919,19 +960,24 @@
                             </span>
                           </div>
 
-                          <h3 className="text-lg font-bold text-white font-cinzel tracking-wide leading-snug group-hover:text-cyan-200 transition-colors">
-                            {item.role}
+                          {/* INVERTED: ACTOR NAME AS PRIMARY CARD TITLE */}
+                          <h3 className="text-xl font-bold font-cinzel text-white group-hover:text-cyan-200 transition-colors tracking-wide leading-tight mt-1">
+                            {item.actorName}
                           </h3>
                         </div>
 
-                        <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                          <span className="text-slate-400 font-semibold">Performer:</span>
-                          <span className="font-bold text-cyan-200 group-hover:text-white truncate ml-2">
-                            {item.actorName}
-                          </span>
+                        {/* ASSIGNED ROLE */}
+                        <div className="mt-4 pt-3 border-t border-slate-800/80">
+                          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
+                            Assigned Role:
+                          </div>
+                          <div className="text-sm font-extrabold text-cyan-300 group-hover:text-cyan-100 flex items-center gap-1.5">
+                            <span>❄️</span>
+                            <span className="leading-snug">{item.role}</span>
+                          </div>
                         </div>
 
-                        <div className="mt-2 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
+                        <div className="mt-3 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
                           <span>🎉 Tap to celebrate</span>
                         </div>
                       </div>
@@ -943,7 +989,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* CELEBRATION PHOTO-OP FANFARE MODAL                       */}
+          {/* CELEBRATION PHOTO-OP FANFARE MODAL (ACTOR-FIRST)         */}
           {/* ======================================================== */}
           {celebrationTarget && (
             <div 
@@ -965,37 +1011,38 @@
                   </button>
 
                   {/* Fanfare Medallion */}
-                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600 via-sky-400 to-indigo-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-500/40 mb-4 border border-white/20">
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600 via-sky-400 to-indigo-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-500/40 mb-3 border border-white/20">
                     ❄️
                   </div>
 
-                  <span className="text-xs uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full mb-3">
+                  <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full mb-2">
                     FROZEN JR. • OFFICIAL CASTING
                   </span>
 
-                  <h4 className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
+                  <h4 className="text-xs text-slate-400 uppercase tracking-wider font-semibold mt-1">
                     Congratulations to
                   </h4>
 
-                  <h2 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-white to-cyan-200 tracking-wide mt-1 mb-4">
+                  {/* ACTOR NAME SPOTLIGHT */}
+                  <h2 className="text-3xl md:text-4xl font-extrabold font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-white to-cyan-200 tracking-wide mt-1 mb-4 leading-tight">
                     {celebrationTarget.actorName}
                   </h2>
 
-                  {/* Character banner badge */}
+                  {/* ASSIGNED ROLE BANNER */}
                   <div className="w-full bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border border-cyan-500/40 p-4 rounded-2xl mb-4 shadow-inner">
                     <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest block mb-1">
                       Cast in the Role of
                     </span>
-                    <span className="text-xl md:text-2xl font-cinzel font-black text-cyan-300">
+                    <span className="text-xl md:text-2xl font-cinzel font-black text-cyan-300 block">
                       {celebrationTarget.role}
                     </span>
-                    <div className="mt-1.5 inline-block text-[10px] uppercase font-bold text-slate-400 bg-slate-950/80 px-2.5 py-0.5 rounded border border-slate-800">
+                    <div className="mt-2 inline-block text-[10px] uppercase font-bold text-slate-400 bg-slate-950/80 px-2.5 py-0.5 rounded border border-slate-800">
                       {celebrationTarget.category || 'Company'}
                     </div>
                   </div>
 
                   <p className="text-xs text-cyan-200/80 italic mb-6 leading-relaxed">
-                    "Some people are worth melting for." ❄️ Good luck in rehearsals!
+                    "Some people are worth melting for." ❄️ Have a magical time in rehearsals!
                   </p>
 
                   {/* Action buttons */}
@@ -1302,12 +1349,12 @@
                     </div>
                   </div>
 
-                  {/* MULTI-SELECT CHARACTER LIST */}
+                  {/* MULTI-SELECT PERFORMER LIST */}
                   <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                       <div>
-                        <label className="block text-cyan-300 font-bold text-sm">Select Who is Called</label>
-                        <p className="text-[11px] text-slate-400">Select individual characters or full groups</p>
+                        <label className="block text-cyan-300 font-bold text-sm">Select Performers Called</label>
+                        <p className="text-[11px] text-slate-400">Select performers individually or by group</p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -1343,19 +1390,20 @@
                     </div>
 
                     <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                      {castList.map((item) => {
-                        const isSelected = editCallData.calledRoles.includes(item.role);
+                      {actorList.map((item) => {
+                        const performerTag = `${item.actorName} (${item.role})`;
+                        const isSelected = editCallData.calledRoles.includes(performerTag);
 
                         return (
                           <div key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-slate-700">
                             <div>
-                              <span className="font-bold text-white text-xs">{item.role}</span>
-                              <span className="text-[10px] text-slate-400 ml-2">({item.actorName})</span>
+                              <span className="font-bold text-white text-xs">{item.actorName}</span>
+                              <span className="text-[10px] text-slate-400 ml-2">({item.role})</span>
                             </div>
 
                             <button
                               type="button"
-                              onClick={() => toggleCalledRole(item.role)}
+                              onClick={() => toggleCalledRole(performerTag)}
                               className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
                                 isSelected
                                   ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
