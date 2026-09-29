@@ -85,6 +85,9 @@
 
     // Google Apps Script Web App Backend Gateway
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
+    
+    // Direct CSV Link (Guaranteed fallback for Cast)
+    const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
 
     // Universal Date Formatter for Google Sheets & ISO Strings
     function formatCallBoardDate(rawVal) {
@@ -221,10 +224,19 @@
       });
     }
 
+    // Cast Processor with Safety Verification
     function processCastRows(rows) {
       if (!Array.isArray(rows) || rows.length < 2) return [];
 
       const headers = rows[0].map(h => String(h || '').toLowerCase().trim());
+      
+      // Safety check: ensure this is actually the Cast Sheet, not Rehearsal sheet
+      const hasCastHeaders = headers.some(h => 
+        h.includes('role') || h.includes('character') || h.includes('part') || 
+        h.includes('summer') || h.includes('winter') || h.includes('actor')
+      );
+      if (!hasCastHeaders) return [];
+
       const catIdx = headers.findIndex(h => h.includes('cat') || h.includes('type') || h.includes('group') || h.includes('tier'));
       const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
       const col2Idx = headers.findIndex(h => h.includes('summer') || h.includes('snow') || h.includes('cast a') || h.includes('actor') || h.includes('name'));
@@ -338,7 +350,7 @@
       const [adminPinError, setAdminPinError] = useState('');
       const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-      // Instant 0ms Load from Local Storage Cache
+      // Instant 0ms Cache initialization
       const [actorList, setActorList] = useState(() => {
         const saved = localStorage.getItem('frozen_cast_list');
         return saved ? JSON.parse(saved) : [];
@@ -363,9 +375,12 @@
       const [backendStatus, setBackendStatus] = useState('Connecting to backend...');
       const [callSearchRole, setCallSearchRole] = useState('');
 
-      // Master Calendar State
-      const [calendarEvents, setCalendarEvents] = useState([]);
-      const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+      // Fast Local Cached Calendar State (0ms load)
+      const [calendarEvents, setCalendarEvents] = useState(() => {
+        const saved = localStorage.getItem('frozen_calendar_events');
+        return saved ? JSON.parse(saved) : [];
+      });
+      const [isLoadingCalendar, setIsLoadingCalendar] = useState(() => !localStorage.getItem('frozen_calendar_events'));
       const [calendarSearch, setCalendarSearch] = useState('');
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
@@ -407,32 +422,62 @@
         });
       };
 
-      // Fast, Secure Cast Fetch via Direct Apps Script Route
+      // Resilient Cast Fetcher
       const loadLiveCast = async () => {
         if (actorList.length === 0) setIsLoadingCast(true);
         setCastError(null);
 
+        // 1. Try Backend Proxy
         try {
           const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getCast&t=${Date.now()}`);
-          if (!res.ok) throw new Error("Could not fetch Cast data from backend.");
-          const rawRows = await res.json();
-
-          if (Array.isArray(rawRows) && rawRows.length > 1) {
-            const parsed = processCastRows(rawRows);
-            if (parsed.length > 0) {
-              setActorList(parsed);
-              localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
-            } else {
-              setCastError("Cast spreadsheet returned no actor rows yet.");
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 1) {
+              const parsed = processCastRows(data);
+              if (parsed.length > 0) {
+                setActorList(parsed);
+                localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
+                setIsLoadingCast(false);
+                return;
+              }
             }
-          } else if (rawRows.status === 'error') {
-            throw new Error(rawRows.message);
           }
         } catch (err) {
-          console.error("Cast fetch failed:", err);
-          if (actorList.length === 0) {
-            setCastError("Could not load cast roster. Verify Apps Script deployment.");
+          console.warn("Backend proxy failed for cast, falling back to direct CSV...", err);
+        }
+
+        // 2. Direct CSV Fallback
+        try {
+          const fallbackRes = await fetch(`${DIRECT_CAST_CSV_URL}&t=${Date.now()}`);
+          if (!fallbackRes.ok) throw new Error("Could not fetch Cast spreadsheet.");
+          const csvText = await fallbackRes.text();
+          
+          const rawLines = csvText.trim().split(/\r?\n/).map(line => {
+            const row = [];
+            let cur = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') inQuotes = !inQuotes;
+              else if (char === ',' && !inQuotes) {
+                row.push(cur.trim().replace(/^"|"$/g, ''));
+                cur = '';
+              } else cur += char;
+            }
+            row.push(cur.trim().replace(/^"|"$/g, ''));
+            return row;
+          });
+
+          const parsed = processCastRows(rawLines);
+          if (parsed.length > 0) {
+            setActorList(parsed);
+            localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
+          } else {
+            setCastError("Cast spreadsheet returned no actor rows.");
           }
+        } catch (fallbackErr) {
+          console.error("Both cast fetch methods failed:", fallbackErr);
+          setCastError("Could not load cast roster. Please check network connection.");
         } finally {
           setIsLoadingCast(false);
         }
@@ -460,18 +505,21 @@
         }
       };
 
+      // Fast Calendar Fetcher with Local Storage
       const fetchCalendarEvents = async () => {
         if (!CALLBOARD_BACKEND_URL) return;
-        setIsLoadingCalendar(true);
+        if (calendarEvents.length === 0) setIsLoadingCalendar(true);
+
         try {
           const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getCalendarEvents&t=${Date.now()}`);
           const data = await res.json();
           if (Array.isArray(data)) {
             data.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
             setCalendarEvents(data);
+            localStorage.setItem('frozen_calendar_events', JSON.stringify(data));
           }
         } catch (err) {
-          console.log("Could not load native calendar feed:", err);
+          console.log("Could not load calendar feed:", err);
         } finally {
           setIsLoadingCalendar(false);
         }
@@ -1375,7 +1423,7 @@
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      <span>🗓️ Full Season Run ({calendarEvents.length})</span>
+                      <span>🗓️️ Full Season Run ({calendarEvents.length})</span>
                     </button>
                   </div>
                 </div>
