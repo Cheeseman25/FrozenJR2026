@@ -89,10 +89,9 @@
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
-    // Robust Date Formatter for Google Sheets & ISO Strings
+    // Universal Date Formatter for Google Sheets & ISO Strings
     function formatCallBoardDate(rawVal) {
       if (!rawVal) return '';
-
       if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
         return rawVal.toLocaleDateString('en-US', {
           weekday: 'short',
@@ -101,16 +100,10 @@
           year: 'numeric'
         });
       }
-
       const str = String(rawVal).trim();
-
-      // 1. Matches "YYYY-MM-DD" or standard ISO strings
       const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (ymd) {
-        const y = parseInt(ymd[1], 10);
-        const m = parseInt(ymd[2], 10) - 1;
-        const d = parseInt(ymd[3], 10);
-        const dt = new Date(y, m, d);
+        const dt = new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
         if (!isNaN(dt.getTime())) {
           return dt.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -120,14 +113,9 @@
           });
         }
       }
-
-      // 2. Matches "M/D/YYYY" or "MM/DD/YYYY"
       const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
       if (mdy) {
-        const m = parseInt(mdy[1], 10) - 1;
-        const d = parseInt(mdy[2], 10);
-        const y = parseInt(mdy[3], 10);
-        const dt = new Date(y, m, d);
+        const dt = new Date(parseInt(mdy[3], 10), parseInt(mdy[1], 10) - 1, parseInt(mdy[2], 10));
         if (!isNaN(dt.getTime())) {
           return dt.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -137,8 +125,6 @@
           });
         }
       }
-
-      // 3. Direct browser fallback
       const parsed = new Date(str);
       if (!isNaN(parsed.getTime())) {
         return parsed.toLocaleDateString('en-US', {
@@ -148,11 +134,9 @@
           year: 'numeric'
         });
       }
-
       return str;
     }
 
-    // Helper: Turn any date representation into comparable epoch timestamp
     function parseDateTimestamp(val) {
       if (!val) return 0;
       if (val instanceof Date) return val.getTime();
@@ -171,10 +155,7 @@
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
         const ctx = new AudioCtx();
-
-        if (ctx.state === 'suspended') {
-          ctx.resume();
-        }
+        if (ctx.state === 'suspended') ctx.resume();
 
         const notes = [
           { freqs: [466.16], delay: 0.00, dur: 0.12 },
@@ -186,66 +167,38 @@
         ];
 
         const now = ctx.currentTime;
-
         notes.forEach(note => {
           note.freqs.forEach(freq => {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
-
             osc.type = 'sawtooth';
             osc.frequency.setValueAtTime(freq, now + note.delay);
-
             gain.gain.setValueAtTime(0.0001, now + note.delay);
             gain.gain.exponentialRampToValueAtTime(0.18, now + note.delay + 0.03);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + note.delay + note.dur);
-
             osc.connect(gain);
             gain.connect(ctx.destination);
-
             osc.start(now + note.delay);
             osc.stop(now + note.delay + note.dur + 0.05);
           });
         });
       } catch (err) {
-        console.log("Audio fanfare blocked or unsupported on this device:", err);
+        console.log("Audio fanfare unsupported or blocked:", err);
       }
     }
 
-    // Helper: Confetti Cannon & Fanfare Trigger
     function launchFanfareCelebration() {
       playAudibleFanfare();
-
       if (typeof confetti === 'function') {
         const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
-
-        confetti({
-          particleCount: 65,
-          angle: 60,
-          spread: 70,
-          origin: { x: 0.1, y: 0.7 },
-          colors: colors
-        });
-
-        confetti({
-          particleCount: 65,
-          angle: 120,
-          spread: 70,
-          origin: { x: 0.9, y: 0.7 },
-          colors: colors
-        });
-
+        confetti({ particleCount: 65, angle: 60, spread: 70, origin: { x: 0.1, y: 0.7 }, colors });
+        confetti({ particleCount: 65, angle: 120, spread: 70, origin: { x: 0.9, y: 0.7 }, colors });
         setTimeout(() => {
-          confetti({
-            particleCount: 95,
-            spread: 100,
-            origin: { y: 0.55 },
-            colors: colors
-          });
+          confetti({ particleCount: 95, spread: 100, origin: { y: 0.55 }, colors });
         }, 250);
       }
     }
 
-    // Helper: Universal Clickable Link Renderer for text fields
     function renderWithLinks(text) {
       if (!text || typeof text !== 'string') return text;
       const urlRegex = /(https?:\/\/[^\s]+|meet\.google\.com\/[a-zA-Z0-9_-]+)/g;
@@ -270,7 +223,6 @@
       });
     }
 
-    // Helper: CSV Parser
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
@@ -295,7 +247,6 @@
       }
 
       const headers = parseRow(lines[0]).map(h => (h || '').toLowerCase().trim());
-
       const catIdx = headers.findIndex(h => h.includes('cat') || h.includes('type') || h.includes('group') || h.includes('tier'));
       const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('character') || h.includes('part'));
       const col2Idx = headers.findIndex(h => h.includes('summer') || h.includes('snow') || h.includes('cast a') || h.includes('actor') || h.includes('name'));
@@ -307,7 +258,6 @@
       const effectiveCol3 = col3Idx !== -1 ? col3Idx : 3;
 
       const rawItems = [];
-
       lines.slice(1).forEach((line, rowIdx) => {
         const cols = parseRow(line);
         const category = cols[effectiveCatCol] || 'Company';
@@ -364,12 +314,8 @@
           });
         } else {
           const existing = actorMap.get(key);
-          if (!existing.roles.includes(item.role)) {
-            existing.roles.push(item.role);
-          }
-          if (!existing.categories.includes(item.category)) {
-            existing.categories.push(item.category);
-          }
+          if (!existing.roles.includes(item.role)) existing.roles.push(item.role);
+          if (!existing.categories.includes(item.category)) existing.categories.push(item.category);
         }
       });
 
@@ -398,7 +344,7 @@
       costumes: { label: 'Costumes', icon: '👗', path: 'costumes' },
       music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
-      calendar: { label: 'Master Calendar', icon: '🗓️', path: 'calendar' }
+      calendar: { label: 'Master Schedule', icon: '🗓️', path: 'calendar' }
     };
 
     function ProductionApp() {
@@ -437,6 +383,11 @@
       const [backendStatus, setBackendStatus] = useState('Checking connection...');
       const [callSearchRole, setCallSearchRole] = useState('');
 
+      // Master Calendar State
+      const [calendarEvents, setCalendarEvents] = useState([]);
+      const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+      const [calendarSearch, setCalendarSearch] = useState('');
+
       const [isEditingCall, setIsEditingCall] = useState(false);
       const [editCallData, setEditCallData] = useState({
         id: '',
@@ -460,9 +411,7 @@
       useEffect(() => {
         const handleHashChange = () => {
           const hash = window.location.hash.replace('#', '').toLowerCase();
-          if (TAB_INFO[hash]) {
-            setActiveTab(hash);
-          }
+          if (TAB_INFO[hash]) setActiveTab(hash);
         };
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
@@ -508,7 +457,6 @@
               calledRoles: typeof item.calledRoles === 'string' ? item.calledRoles.split(',').map(s=>s.trim()).filter(Boolean) : (item.calledRoles || []),
               focusScenes: typeof item.focusScenes === 'string' ? item.focusScenes.split(',').map(s=>s.trim()).filter(Boolean) : (item.focusScenes || [])
             }));
-            // Sort reliably by timestamp
             formatted.sort((a, b) => parseDateTimestamp(a.date) - parseDateTimestamp(b.date));
             setRehearsals(formatted);
             localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
@@ -520,9 +468,26 @@
         }
       };
 
+      const fetchCalendarEvents = async () => {
+        if (!CALLBOARD_BACKEND_URL) return;
+        setIsLoadingCalendar(true);
+        try {
+          const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getCalendarEvents&t=${Date.now()}`);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setCalendarEvents(data);
+          }
+        } catch (err) {
+          console.log("Could not load native calendar feed, fallback will be used:", err);
+        } finally {
+          setIsLoadingCalendar(false);
+        }
+      };
+
       useEffect(() => {
         loadLiveCast();
         fetchBackendRehearsals();
+        fetchCalendarEvents();
       }, []);
 
       useEffect(() => {
@@ -650,9 +615,7 @@
           updated = [...rehearsals, newEntry];
         }
 
-        // Resilient Date Sorting
         updated.sort((a, b) => parseDateTimestamp(a.date) - parseDateTimestamp(b.date));
-
         setRehearsals(updated);
         localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
         setIsEditingCall(false);
@@ -718,6 +681,26 @@
       }, [actorList, castFilterQuery, selectedCategoryFilter]);
 
       const allRevealed = actorList.length > 0 && revealedCardIds.length >= actorList.length;
+
+      // Group calendar events by Month/Year for clean reading
+      const groupedCalendarEvents = useMemo(() => {
+        const q = calendarSearch.toLowerCase().trim();
+        const filtered = calendarEvents.filter(ev => {
+          if (!q) return true;
+          return (ev.title && ev.title.toLowerCase().includes(q)) || 
+                 (ev.location && ev.location.toLowerCase().includes(q)) ||
+                 (ev.description && ev.description.toLowerCase().includes(q));
+        });
+
+        const groups = {};
+        filtered.forEach(ev => {
+          const d = new Date(ev.startTime);
+          const monthYear = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          if (!groups[monthYear]) groups[monthYear] = [];
+          groups[monthYear].push(ev);
+        });
+        return groups;
+      }, [calendarEvents, calendarSearch]);
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -852,7 +835,6 @@
                 {filteredRehearsals.map((reh) => {
                   const isFullCast = (reh.type && reh.type.toLowerCase().includes('full cast')) || 
                                      (Array.isArray(reh.calledRoles) && reh.calledRoles.some(r => r.toLowerCase().includes('full cast') || r.toLowerCase() === 'company'));
-
                   const formattedDate = formatCallBoardDate(reh.date);
 
                   return (
@@ -1280,19 +1262,19 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 6: MASTER GOOGLE CALENDAR EMBED & ONE-TAP SUBSCRIBE  */}
+          {/* TAB 6: MASTER SCHEDULE & CALENDAR (NATIVE AGENDA)        */}
           {/* ======================================================== */}
           {activeTab === 'calendar' && (
             <div className="space-y-6">
               <div className="glass-card p-6 rounded-3xl border border-cyan-500/20 shadow-xl">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-cyan-900/60">
                   <div>
                     <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-bold bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
-                      Live Schedule Sync
+                      Live Schedule Feed
                     </span>
-                    <h3 className="text-2xl font-bold font-cinzel text-white mt-1.5">Production Master Calendar</h3>
-                    <p className="text-xs md:text-sm text-slate-300">
-                      Sync this schedule directly to your phone so you never miss a Saturday company run, Wednesday call, or tech week rehearsal.
+                    <h3 className="text-2xl font-bold font-cinzel text-white mt-1.5">Master Rehearsal & Production Calendar</h3>
+                    <p className="text-xs md:text-sm text-slate-300 mt-1">
+                      Direct schedule feed showing all scheduled rehearsals, calls, and performance dates without blank days.
                     </p>
                   </div>
 
@@ -1318,24 +1300,136 @@
                       </svg>
                       <span>Subscribe on iPhone / Mac</span>
                     </a>
+
+                    <button
+                      onClick={fetchCalendarEvents}
+                      disabled={isLoadingCalendar}
+                      className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-3 py-2.5 rounded-xl border border-cyan-800 flex items-center gap-1.5 transition disabled:opacity-50"
+                      title="Sync calendar events now"
+                    >
+                      <span className={isLoadingCalendar ? 'animate-spin' : ''}>↻</span>
+                      <span>Sync</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="aspect-[4/3] md:aspect-[16/9] w-full rounded-2xl overflow-hidden border border-cyan-800/50 bg-slate-950 shadow-inner">
-                  <iframe
-                    src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FNew_York`}
-                    style={{ border: 0 }}
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    scrolling="no"
-                    title="Frozen JR Production Calendar"
-                  ></iframe>
+                {/* Filter and View Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+                  <div className="w-full sm:w-80">
+                    <input
+                      type="text"
+                      placeholder="Search events, scenes, or locations..."
+                      value={calendarSearch}
+                      onChange={(e) => setCalendarSearch(e.target.value)}
+                      className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-3.5 py-2 text-xs text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+                  <div className="text-xs text-slate-400 self-start sm:self-center">
+                    Showing next 90 days of rehearsals & performances
+                  </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                  <span>⏰ Displaying America/New York time zone</span>
-                  <span className="text-cyan-300 font-medium">Auto-updates across devices</span>
+                {/* Event Groups List */}
+                {isLoadingCalendar && calendarEvents.length === 0 ? (
+                  <div className="p-12 text-center text-cyan-300">
+                    <div className="text-3xl animate-bounce mb-2">🗓️</div>
+                    <p className="font-cinzel text-sm">Syncing live calendar schedule...</p>
+                  </div>
+                ) : Object.keys(groupedCalendarEvents).length > 0 ? (
+                  <div className="space-y-6">
+                    {Object.keys(groupedCalendarEvents).map(monthYear => (
+                      <div key={monthYear} className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-cinzel font-bold text-sm tracking-wider text-cyan-300 uppercase">
+                            {monthYear}
+                          </h4>
+                          <div className="flex-1 border-t border-cyan-900/60"></div>
+                        </div>
+
+                        <div className="grid gap-3">
+                          {groupedCalendarEvents[monthYear].map(evt => {
+                            const start = new Date(evt.startTime);
+                            const end = new Date(evt.endTime);
+
+                            const timeFormatted = evt.isAllDay
+                              ? 'All Day'
+                              : `${start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+
+                            return (
+                              <div
+                                key={evt.id}
+                                className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500/40 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                              >
+                                <div className="flex items-start sm:items-center gap-4">
+                                  {/* Date Badge */}
+                                  <div className="text-center bg-gradient-to-b from-cyan-950 to-slate-900 border border-cyan-700/60 px-3.5 py-2 rounded-xl shrink-0 min-w-[64px]">
+                                    <div className="text-[10px] uppercase font-bold text-cyan-400">
+                                      {start.toLocaleDateString('en-US', { weekday: 'short' })}
+                                    </div>
+                                    <div className="text-xl font-black text-white font-cinzel leading-none my-1">
+                                      {start.toLocaleDateString('en-US', { day: 'numeric' })}
+                                    </div>
+                                    <div className="text-[9px] uppercase font-semibold text-slate-400">
+                                      {start.toLocaleDateString('en-US', { month: 'short' })}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <h4 className="text-base font-bold text-white font-cinzel leading-snug">
+                                      {renderWithLinks(evt.title)}
+                                    </h4>
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-1">
+                                      <span className="text-cyan-300 font-semibold flex items-center gap-1">
+                                        ⏰ {timeFormatted}
+                                      </span>
+                                      {evt.location && (
+                                        <span className="text-slate-300 flex items-center gap-1">
+                                          📍 {renderWithLinks(evt.location)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {evt.description && (
+                                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                                        {renderWithLinks(evt.description)}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-slate-400">
+                      {calendarEvents.length === 0 
+                        ? 'No upcoming calendar events found in feed. (Check Apps Script deployment if you just updated it).' 
+                        : 'No events match your search.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Secondary Fallback Schedule View for Quick Reference */}
+                <div className="mt-8 pt-6 border-t border-slate-800">
+                  <details className="text-xs text-slate-400 cursor-pointer">
+                    <summary className="hover:text-cyan-300 font-semibold select-none">
+                      Prefer the embedded Google Calendar schedule view? Click to expand.
+                    </summary>
+                    <div className="mt-4 aspect-[4/3] md:aspect-[16/9] w-full rounded-2xl overflow-hidden border border-cyan-800/50 bg-slate-950">
+                      <iframe
+                        src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FNew_York&mode=AGENDA&showTabs=1&showPrint=0&showTitle=0&showCalendars=0&bgcolor=%23082f49`}
+                        style={{ border: 0 }}
+                        width="100%"
+                        height="100%"
+                        frameBorder="0"
+                        scrolling="no"
+                        title="Frozen JR Production Calendar"
+                      ></iframe>
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
@@ -1563,7 +1657,6 @@
                     </div>
                   </div>
 
-                  {/* MULTI-SELECT PERFORMER LIST */}
                   <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                       <div>
