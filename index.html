@@ -200,7 +200,6 @@
           catLower.includes('ensemble') || 
           roleLower.includes('ensemble');
 
-        // Extract individual actor names
         const actors = [valCol2, valCol3]
           .map(v => v.trim())
           .filter(v => v && v.toLowerCase() !== 'tbd');
@@ -226,7 +225,6 @@
         }
       });
 
-      // Group by actor name so each actor has one unified card with all their roles
       const actorMap = new Map();
       rawItems.forEach(item => {
         const key = item.actorName.toLowerCase().trim();
@@ -289,23 +287,19 @@
       const [adminPinError, setAdminPinError] = useState('');
       const [adminPin] = useState('1234');
 
-      // Live Google Sheet Cast State (Actor-Centric)
       const [actorList, setActorList] = useState([]);
       const [isLoadingCast, setIsLoadingCast] = useState(true);
       const [castError, setCastError] = useState(null);
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
-      // Celebration Fanfare Modal for Cast Members
       const [celebrationTarget, setCelebrationTarget] = useState(null);
 
-      // Call Types (with write-ins saved)
       const [callTypes, setCallTypes] = useState(() => {
         const saved = localStorage.getItem('frozen_call_types');
         return saved ? JSON.parse(saved) : INITIAL_CALL_TYPES;
       });
 
-      // Rehearsals State
       const [rehearsals, setRehearsals] = useState(() => {
         const saved = localStorage.getItem('frozen_rehearsals');
         return saved ? JSON.parse(saved) : [];
@@ -313,7 +307,6 @@
       const [backendStatus, setBackendStatus] = useState('Checking connection...');
       const [callSearchRole, setCallSearchRole] = useState('');
 
-      // Admin Modal State
       const [isEditingCall, setIsEditingCall] = useState(false);
       const [editCallData, setEditCallData] = useState({
         id: '',
@@ -353,7 +346,6 @@
         });
       };
 
-      // Fetch Live Cast from Google Sheets CSV
       const loadLiveCast = async () => {
         setIsLoadingCast(true);
         setCastError(null);
@@ -375,7 +367,6 @@
         }
       };
 
-      // Fetch Live Rehearsals from Google Sheet Backend
       const fetchBackendRehearsals = async () => {
         if (!CALLBOARD_BACKEND_URL) return;
         try {
@@ -478,13 +469,11 @@
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
 
-      // Open celebration modal and fire confetti
       const openCelebration = (item) => {
         setCelebrationTarget(item);
         launchFanfareConfetti();
       };
 
-      // Save rehearsal call & post to Google Sheet backend
       const saveCall = async (e) => {
         e.preventDefault();
 
@@ -564,7 +553,6 @@
         });
       }, [rehearsals, callSearchRole]);
 
-      // Category breakdown & filtered list for actor cards
       const availableCategories = useMemo(() => {
         const cats = Array.from(new Set(actorList.map(c => c.category || 'Company')));
         return ['ALL', ...cats];
@@ -839,7 +827,7 @@
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: LIVE ACTOR CARDS (ACTOR-FIRST SPOTLIGHT)         */}
+          {/* TAB 2: LIVE ACTOR CARDS (ACTOR-FIRST SPOTLIGHT)          */}
           {/* ======================================================== */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
@@ -857,7 +845,8 @@
                       Cast & Ensemble Assignments
                     </h3>
                     <p className="text-xs md:text-sm text-purple-100/90 mt-1.5 leading-relaxed font-medium">
-                      There will be two full casts of Frozen Jr.  Which cast each actor will belong to will depend on availability.  Featured ensemble roles have lines. Which featured ensemble member each actor will play will be assigned in rehearsals.
+                      There will be two full casts of Frozen Jr. Which cast each actor will belong to will depend on availability. Featured ensemble roles have lines. Which featured ensemble member each actor will play will be assigned in rehearsals.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -959,7 +948,7 @@
                             </span>
                           </div>
 
-                          {/* INVERTED: ACTOR NAME AS PRIMARY CARD TITLE */}
+                          {/* ACTOR NAME AS PRIMARY CARD TITLE */}
                           <h3 className="text-xl font-bold font-cinzel text-white group-hover:text-cyan-200 transition-colors tracking-wide leading-tight mt-1">
                             {item.actorName}
                           </h3>
