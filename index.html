@@ -99,7 +99,7 @@
       });
     }
 
-    // Helper: Dynamic Single-Header CSV Parser for Summer/Winter & Featured Ensemble
+    // Helper: Fixed CSV Parser that safely handles apostrophes in names (e.g. O'Sullivan)
     function parseCSV(text) {
       const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) return [];
@@ -110,16 +110,17 @@
         let inQuotes = false;
         for (let i = 0; i < rowStr.length; i++) {
           const char = rowStr[i];
-          if (char === '"' || char === "'") {
+          // Standard CSV only escapes via double quotes ("), not single quotes (')
+          if (char === '"') {
             inQuotes = !inQuotes;
           } else if (char === ',' && !inQuotes) {
-            result.push(cur.trim().replace(/^["']|["']$/g, ''));
+            result.push(cur.trim().replace(/^"|"$/g, ''));
             cur = '';
           } else {
             cur += char;
           }
         }
-        result.push(cur.trim().replace(/^["']|["']$/g, ''));
+        result.push(cur.trim().replace(/^"|"$/g, ''));
         return result;
       }
 
@@ -200,7 +201,7 @@
       const [castList, setCastList] = useState([]);
       const [isLoadingCast, setIsLoadingCast] = useState(true);
       const [castError, setCastError] = useState(null);
-      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL'); // 'ALL', 'SUMMER', 'WINTER'
+      const [selectedCastGroup, setSelectedCastGroup] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
       // Call Types (with write-ins saved)
@@ -466,7 +467,6 @@
         });
       }, [rehearsals, callSearchRole]);
 
-      // Split into Standard Dual-Cast members and Featured Ensemble members
       const { mainCast, featuredEnsembleCast } = useMemo(() => {
         const q = castFilterQuery.toLowerCase();
         const filtered = castList.filter(item => 
@@ -783,7 +783,6 @@
                 </div>
               </div>
 
-              {/* Cast Selector & Search Filter */}
               <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="w-full md:w-72">
                   <input
@@ -902,7 +901,7 @@
                 )}
               </div>
 
-              {/* FEATURED ENSEMBLE SECTION (STANDALONE - NOT TIED TO SUMMER/WINTER) */}
+              {/* FEATURED ENSEMBLE SECTION */}
               {featuredEnsembleCast.length > 0 && (
                 <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/30">
                   <div className="bg-purple-950/70 p-4 border-b border-purple-800/50 flex items-start gap-3">
