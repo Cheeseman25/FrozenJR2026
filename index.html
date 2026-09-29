@@ -85,9 +85,6 @@
 
     // Google Apps Script Web App Backend Gateway
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
-    
-    // Direct CSV Fallback for Cast Roster
-    const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
 
     // Universal Date Formatter for Google Sheets & ISO Strings
     function formatCallBoardDate(rawVal) {
@@ -341,8 +338,12 @@
       const [adminPinError, setAdminPinError] = useState('');
       const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-      const [actorList, setActorList] = useState([]);
-      const [isLoadingCast, setIsLoadingCast] = useState(true);
+      // Instant 0ms Load from Local Storage Cache
+      const [actorList, setActorList] = useState(() => {
+        const saved = localStorage.getItem('frozen_cast_list');
+        return saved ? JSON.parse(saved) : [];
+      });
+      const [isLoadingCast, setIsLoadingCast] = useState(() => !localStorage.getItem('frozen_cast_list'));
       const [castError, setCastError] = useState(null);
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
@@ -406,60 +407,32 @@
         });
       };
 
-      // Resilient Dual-Source Cast Loader
+      // Fast, Secure Cast Fetch via Direct Apps Script Route
       const loadLiveCast = async () => {
-        setIsLoadingCast(true);
+        if (actorList.length === 0) setIsLoadingCast(true);
         setCastError(null);
 
-        // 1. Try Apps Script Backend Proxy first
         try {
           const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getCast&t=${Date.now()}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 1) {
-              const parsed = processCastRows(data);
-              if (parsed.length > 0) {
-                setActorList(parsed);
-                setIsLoadingCast(false);
-                return;
-              }
+          if (!res.ok) throw new Error("Could not fetch Cast data from backend.");
+          const rawRows = await res.json();
+
+          if (Array.isArray(rawRows) && rawRows.length > 1) {
+            const parsed = processCastRows(rawRows);
+            if (parsed.length > 0) {
+              setActorList(parsed);
+              localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
+            } else {
+              setCastError("Cast spreadsheet returned no actor rows yet.");
             }
+          } else if (rawRows.status === 'error') {
+            throw new Error(rawRows.message);
           }
         } catch (err) {
-          console.warn("Backend proxy failed for cast, falling back to direct CSV...", err);
-        }
-
-        // 2. Direct CSV Fallback (guarantees actor list loads)
-        try {
-          const fallbackRes = await fetch(`${DIRECT_CAST_CSV_URL}&t=${Date.now()}`);
-          if (!fallbackRes.ok) throw new Error("Could not fetch Cast spreadsheet.");
-          const csvText = await fallbackRes.text();
-          
-          const rawLines = csvText.trim().split(/\r?\n/).map(line => {
-            const row = [];
-            let cur = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-              const char = line[i];
-              if (char === '"') inQuotes = !inQuotes;
-              else if (char === ',' && !inQuotes) {
-                row.push(cur.trim().replace(/^"|"$/g, ''));
-                cur = '';
-              } else cur += char;
-            }
-            row.push(cur.trim().replace(/^"|"$/g, ''));
-            return row;
-          });
-
-          const parsed = processCastRows(rawLines);
-          if (parsed.length > 0) {
-            setActorList(parsed);
-          } else {
-            setCastError("Cast spreadsheet returned no actor rows.");
+          console.error("Cast fetch failed:", err);
+          if (actorList.length === 0) {
+            setCastError("Could not load cast roster. Verify Apps Script deployment.");
           }
-        } catch (fallbackErr) {
-          console.error("Both cast fetch methods failed:", fallbackErr);
-          setCastError("Could not load cast roster. Please check network connection.");
         } finally {
           setIsLoadingCast(false);
         }
@@ -1262,7 +1235,7 @@
                   className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-lg shadow-red-950/40 shrink-0"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                   </svg>
                   <span>Open in YouTube ↗</span>
                 </a>
