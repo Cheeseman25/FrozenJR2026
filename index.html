@@ -87,36 +87,91 @@
     // Live Google Apps Script Web App Backend URL
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
 
-    // Helper: Confetti Cannon Trigger
-    function launchFanfareConfetti() {
-      if (typeof confetti !== 'function') return;
+    // --- Helper: Web Audio API Synthesized Brass Trumpet Fanfare ---
+    function playAudibleFanfare() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
 
-      const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
 
-      confetti({
-        particleCount: 60,
-        angle: 60,
-        spread: 70,
-        origin: { x: 0.1, y: 0.7 },
-        colors: colors
-      });
+        // Trumpet notes: Bb4, D5, F5, Bb5 triumphant fanfare progression
+        // [frequencies, start time offset (sec), duration (sec)]
+        const notes = [
+          { freqs: [466.16], delay: 0.00, dur: 0.12 }, // Bb4
+          { freqs: [466.16], delay: 0.14, dur: 0.12 }, // Bb4
+          { freqs: [466.16], delay: 0.28, dur: 0.12 }, // Bb4
+          { freqs: [587.33, 700], delay: 0.44, dur: 0.35 }, // D5 chord
+          { freqs: [700], delay: 0.82, dur: 0.18 }, // F5
+          { freqs: [466.16, 587.33, 932.33], delay: 1.05, dur: 1.3 } // High Bb5 Major Victory Chord
+        ];
 
-      confetti({
-        particleCount: 60,
-        angle: 120,
-        spread: 70,
-        origin: { x: 0.9, y: 0.7 },
-        colors: colors
-      });
+        const now = ctx.currentTime;
 
-      setTimeout(() => {
+        notes.forEach(note => {
+          note.freqs.forEach(freq => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            // Sawtooth waveform gives brass trumpet buzz
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, now + note.delay);
+
+            // Audio envelope (sharp brass attack, gentle decay)
+            gain.gain.setValueAtTime(0.0001, now + note.delay);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + note.delay + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + note.delay + note.dur);
+
+            // Connect and play
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now + note.delay);
+            osc.stop(now + note.delay + note.dur + 0.05);
+          });
+        });
+      } catch (err) {
+        console.log("Audio fanfare blocked or unsupported on this device:", err);
+      }
+    }
+
+    // Helper: Confetti Cannon & Fanfare Trigger
+    function launchFanfareCelebration() {
+      // 1. Play synthesized royal brass audio
+      playAudibleFanfare();
+
+      // 2. Explode visual confetti bursts
+      if (typeof confetti === 'function') {
+        const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
+
         confetti({
-          particleCount: 90,
-          spread: 100,
-          origin: { y: 0.55 },
+          particleCount: 65,
+          angle: 60,
+          spread: 70,
+          origin: { x: 0.1, y: 0.7 },
           colors: colors
         });
-      }, 250);
+
+        confetti({
+          particleCount: 65,
+          angle: 120,
+          spread: 70,
+          origin: { x: 0.9, y: 0.7 },
+          colors: colors
+        });
+
+        setTimeout(() => {
+          confetti({
+            particleCount: 95,
+            spread: 100,
+            origin: { y: 0.55 },
+            colors: colors
+          });
+        }, 250);
+      }
     }
 
     // Helper: Universal Clickable Link Renderer for text fields
@@ -293,15 +348,8 @@
       const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
       const [castFilterQuery, setCastFilterQuery] = useState('');
 
-      // Track which card IDs have been revealed during this session
-      const [revealedCardIds, setRevealedCardIds] = useState(() => {
-        try {
-          const saved = sessionStorage.getItem('frozen_revealed_cards');
-          return saved ? JSON.parse(saved) : [];
-        } catch (e) {
-          return [];
-        }
-      });
+      // Pure in-memory state: Every browser refresh automatically resets all roles to hidden
+      const [revealedCardIds, setRevealedCardIds] = useState([]);
 
       const [celebrationTarget, setCelebrationTarget] = useState(null);
 
@@ -411,12 +459,6 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      useEffect(() => {
-        try {
-          sessionStorage.setItem('frozen_revealed_cards', JSON.stringify(revealedCardIds));
-        } catch (e) {}
-      }, [revealedCardIds]);
-
       const handleLogin = (e) => {
         e.preventDefault();
         if (adminPinInput === adminPin) {
@@ -485,13 +527,18 @@
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
 
-      // Mark card as revealed for this session, open modal, and fire confetti
+      // Mark card as revealed, open modal, and launch fanfare sound + confetti
       const openCelebration = (item) => {
         if (!revealedCardIds.includes(item.id)) {
           setRevealedCardIds(prev => [...prev, item.id]);
         }
         setCelebrationTarget(item);
-        launchFanfareConfetti();
+        launchFanfareCelebration();
+      };
+
+      // Reset all revealed cards back to hidden state immediately
+      const resetHiddenRoles = () => {
+        setRevealedCardIds([]);
       };
 
       const saveCall = async (e) => {
@@ -881,12 +928,22 @@
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     </h4>
                     <p className="text-xs text-slate-300">
-                      Roles are hidden until tapped! Once opened during your session, the role stays revealed.
+                      Roles are hidden until tapped! Tapping plays celebration fanfare music & confetti.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {revealedCardIds.length > 0 && (
+                    <button
+                      onClick={resetHiddenRoles}
+                      className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-700/80 flex items-center gap-1.5 transition shadow"
+                      title="Re-hide all revealed cards immediately"
+                    >
+                      <span>🔒</span>
+                      <span>Re-hide All Roles</span>
+                    </button>
+                  )}
                   <button
                     onClick={loadLiveCast}
                     disabled={isLoadingCast}
@@ -994,7 +1051,7 @@
                         </div>
 
                         <div className="mt-3 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
-                          <span>🎉 Tap to celebrate</span>
+                          <span>🎺 Tap to celebrate</span>
                         </div>
                       </div>
                     );
@@ -1065,11 +1122,11 @@
                   <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
                     <button
                       type="button"
-                      onClick={launchFanfareConfetti}
+                      onClick={launchFanfareCelebration}
                       className="w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-slate-950 font-black py-2.5 rounded-xl text-xs md:text-sm shadow-lg shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-1.5"
                     >
-                      <span>🎉</span>
-                      <span>Celebrate Again!</span>
+                      <span>🎺</span>
+                      <span>Play Fanfare Again!</span>
                     </button>
 
                     <button
