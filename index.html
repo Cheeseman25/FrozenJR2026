@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Frozen JR. Production Portal & Call Board</title>
   
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-1D8TXY3JM5"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-1D8TXY3JM5');
+  </script>
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -71,17 +81,6 @@
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
   </style>
-
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-1D8TXY3JM5"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-1D8TXY3JM5');
-</script>
-  
 </head>
 <body class="selection:bg-cyan-500 selection:text-white pb-20">
   <div id="root"></div>
@@ -99,6 +98,13 @@
     
     // Direct CSV Link (Guaranteed fallback for Cast)
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
+
+    // GA4 Analytics Helper Function
+    function trackAnalyticsEvent(eventName, params = {}) {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', eventName, params);
+      }
+    }
 
     // Universal Date Formatter for Google Sheets & ISO Strings
     function formatCallBoardDate(rawVal) {
@@ -241,7 +247,6 @@
 
       const headers = rows[0].map(h => String(h || '').toLowerCase().trim());
       
-      // Safety check: ensure this is actually the Cast Sheet, not Rehearsal sheet
       const hasCastHeaders = headers.some(h => 
         h.includes('role') || h.includes('character') || h.includes('part') || 
         h.includes('summer') || h.includes('winter') || h.includes('actor')
@@ -411,17 +416,39 @@
       });
       const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
 
+      // Tab Navigator with GA4 Page View Tracking
       const navigateToTab = (tabId) => {
         setActiveTab(tabId);
         window.location.hash = tabId;
+
+        trackAnalyticsEvent('page_view', {
+          page_title: TAB_INFO[tabId]?.label || tabId,
+          page_location: window.location.href,
+          page_path: '/#' + tabId
+        });
       };
 
       useEffect(() => {
         const handleHashChange = () => {
           const hash = window.location.hash.replace('#', '').toLowerCase();
-          if (TAB_INFO[hash]) setActiveTab(hash);
+          if (TAB_INFO[hash]) {
+            setActiveTab(hash);
+            trackAnalyticsEvent('page_view', {
+              page_title: TAB_INFO[hash]?.label || hash,
+              page_location: window.location.href,
+              page_path: '/#' + hash
+            });
+          }
         };
         window.addEventListener('hashchange', handleHashChange);
+        
+        // Initial tab load event
+        trackAnalyticsEvent('page_view', {
+          page_title: TAB_INFO[activeTab]?.label || activeTab,
+          page_location: window.location.href,
+          page_path: '/#' + activeTab
+        });
+
         return () => window.removeEventListener('hashchange', handleHashChange);
       }, []);
 
@@ -568,8 +595,10 @@
             setAdminSessionToken(adminPinInput);
             setShowLoginModal(false);
             setAdminPinInput('');
+            trackAnalyticsEvent('admin_login_success');
           } else {
             setAdminPinError(result.message || 'Invalid PIN. Access denied.');
+            trackAnalyticsEvent('admin_login_failed');
           }
         } catch (err) {
           setAdminPinError('Error connecting to authentication server.');
@@ -581,6 +610,7 @@
       const handleLogout = () => {
         sessionStorage.removeItem('frozen_admin_token');
         setAdminSessionToken('');
+        trackAnalyticsEvent('admin_logout');
       };
 
       const openAddCall = () => {
@@ -639,22 +669,44 @@
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
 
+      // Modal Celebration Open Handler with GA4 Event Tracking
       const openCelebration = (item) => {
-        if (!revealedCardIds.includes(item.id)) {
+        const isFirstReveal = !revealedCardIds.includes(item.id);
+        if (isFirstReveal) {
           setRevealedCardIds(prev => [...prev, item.id]);
         }
         setCelebrationTarget(item);
         launchFanfareCelebration();
+
+        // Track Cast Modal Open in GA4
+        trackAnalyticsEvent('view_cast_card', {
+          actor_name: item.actorName,
+          assigned_role: item.role,
+          category: item.category || 'Company',
+          is_first_reveal: isFirstReveal
+        });
       };
 
       const revealAllRoles = () => {
         const allIds = actorList.map(a => a.id);
         setRevealedCardIds(allIds);
         launchFanfareCelebration();
+        trackAnalyticsEvent('reveal_all_roles', { count: allIds.length });
       };
 
       const resetHiddenRoles = () => {
         setRevealedCardIds([]);
+        trackAnalyticsEvent('rehide_all_roles');
+      };
+
+      // Open Calendar Details Modal with GA4 Event Tracking
+      const openCalendarEventDetails = (evt) => {
+        setSelectedCalendarEvent(evt);
+        trackAnalyticsEvent('view_calendar_event', {
+          event_title: evt.title,
+          event_date: evt.startTime,
+          has_meet_link: Boolean(evt.meetLink)
+        });
       };
 
       const saveCall = async (e) => {
@@ -703,6 +755,8 @@
             const data = await res.json();
             if (data.status === 'error') {
               alert('Save failed: ' + data.message);
+            } else {
+              trackAnalyticsEvent('publish_rehearsal_call', { title: newEntry.title });
             }
           } catch (err) {
             console.error('Error posting to backend', err);
@@ -726,6 +780,8 @@
               const data = await res.json();
               if (data.status === 'error') {
                 alert('Delete failed: ' + data.message);
+              } else {
+                trackAnalyticsEvent('delete_rehearsal_call', { id });
               }
             } catch (err) {
               console.error('Error sending delete to backend', err);
@@ -1416,7 +1472,10 @@
                   <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-cyan-900/80 w-full md:w-auto justify-center">
                     <button
                       type="button"
-                      onClick={() => setCalendarViewMode('next8')}
+                      onClick={() => {
+                        setCalendarViewMode('next8');
+                        trackAnalyticsEvent('calendar_view_mode_change', { mode: 'next8' });
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                         calendarViewMode === 'next8'
                           ? 'bg-cyan-600 text-white shadow-md'
@@ -1427,14 +1486,17 @@
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCalendarViewMode('full')}
+                      onClick={() => {
+                        setCalendarViewMode('full');
+                        trackAnalyticsEvent('calendar_view_mode_change', { mode: 'full' });
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                         calendarViewMode === 'full'
                           ? 'bg-cyan-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      <span>🗓️️ Full Season Run ({calendarEvents.length})</span>
+                      <span>🗓 Full Season Run ({calendarEvents.length})</span>
                     </button>
                   </div>
                 </div>
@@ -1470,7 +1532,7 @@
                             return (
                               <div
                                 key={evt.id}
-                                onClick={() => setSelectedCalendarEvent(evt)}
+                                onClick={() => openCalendarEventDetails(evt)}
                                 className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-cyan-400/60 hover:bg-slate-900/60 transition cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
                               >
                                 <div className="flex items-start sm:items-center gap-4">
@@ -1533,7 +1595,10 @@
                       <div className="pt-4 text-center">
                         <button
                           type="button"
-                          onClick={() => setCalendarViewMode('full')}
+                          onClick={() => {
+                            setCalendarViewMode('full');
+                            trackAnalyticsEvent('calendar_view_mode_change', { mode: 'full' });
+                          }}
                           className="bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-800/80 px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md"
                         >
                           View All Remaining {calendarEvents.length - 8} Season Events & Performances ↓
@@ -1634,6 +1699,7 @@
                         href={meetUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={() => trackAnalyticsEvent('join_google_meet_click', { event_title: ev.title })}
                         className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold py-3 px-4 rounded-2xl transition flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-950/50"
                       >
                         <span className="text-lg">📹</span>
@@ -1662,6 +1728,7 @@
                       href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(CALENDAR_ID)}`}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={() => trackAnalyticsEvent('open_google_calendar_click', { event_title: ev.title })}
                       className="w-full sm:flex-1 bg-slate-900 hover:bg-slate-800 border border-cyan-800 text-cyan-300 hover:text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5"
                     >
                       <span>🗓️ Open in Google Calendar</span>
@@ -1738,7 +1805,10 @@
                   <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
                     <button
                       type="button"
-                      onClick={launchFanfareCelebration}
+                      onClick={() => {
+                        launchFanfareCelebration();
+                        trackAnalyticsEvent('replay_fanfare_click', { actor_name: celebrationTarget.actorName });
+                      }}
                       className="w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-slate-950 font-black py-2.5 rounded-xl text-xs md:text-sm shadow-lg shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-1.5"
                     >
                       <span>🎺</span>
