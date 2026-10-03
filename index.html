@@ -88,28 +88,20 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // --- Production Master Integrations ---
     const CALENDAR_ID = "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com";
     const YOUTUBE_REHEARSAL_PLAYLIST_ID = "PLBDCgs4SWfnF2517NHRg4gLkayKkYssJb";
     const FROZEN_HERO_IMAGE_URL = "https://www.mtishows.com/sites/default/files/styles/hero_responsive_wide/public/show/hero/000523_hero_0.jpg?itok=9msnKhTB";
 
-    // Google Apps Script Web App Backend Gateway
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
-    
-    // Direct CSV Link (Guaranteed fallback for Cast)
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
-
-    // Google Drive Music Master Folder Link
     const GOOGLE_DRIVE_MUSIC_FOLDER_URL = "https://drive.google.com/drive/folders/1WpVSq_wCG0RhjirsZFZjqOR3w50j4RPe?usp=sharing";
 
-    // GA4 Analytics Helper Function
     function trackAnalyticsEvent(eventName, params = {}) {
       if (typeof window.gtag === 'function') {
         window.gtag('event', eventName, params);
       }
     }
 
-    // Universal Date Formatter for Google Sheets & ISO Strings
     function formatCallBoardDate(rawVal) {
       if (!rawVal) return '';
       if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
@@ -124,18 +116,6 @@
       const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (ymd) {
         const dt = new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
-        if (!isNaN(dt.getTime())) {
-          return dt.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-          });
-        }
-      }
-      const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-      if (mdy) {
-        const dt = new Date(parseInt(mdy[3], 10), parseInt(mdy[1], 10) - 1, parseInt(mdy[2], 10));
         if (!isNaN(dt.getTime())) {
           return dt.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -169,7 +149,6 @@
       return isNaN(t) ? 0 : t;
     }
 
-    // Synthesized Web Audio Trumpet Fanfare
     function playAudibleFanfare() {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -244,12 +223,10 @@
       });
     }
 
-    // Cast Processor with Safety Verification
     function processCastRows(rows) {
       if (!Array.isArray(rows) || rows.length < 2) return [];
 
       const headers = rows[0].map(h => String(h || '').toLowerCase().trim());
-      
       const hasCastHeaders = headers.some(h => 
         h.includes('role') || h.includes('character') || h.includes('part') || 
         h.includes('summer') || h.includes('winter') || h.includes('actor')
@@ -369,7 +346,6 @@
       const [adminPinError, setAdminPinError] = useState('');
       const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-      // Instant 0ms Cache initialization
       const [actorList, setActorList] = useState(() => {
         const saved = localStorage.getItem('frozen_cast_list');
         return saved ? JSON.parse(saved) : [];
@@ -394,7 +370,6 @@
       const [backendStatus, setBackendStatus] = useState('Connecting to backend...');
       const [callSearchRole, setCallSearchRole] = useState('');
 
-      // Master Calendar State (0ms load)
       const [calendarEvents, setCalendarEvents] = useState(() => {
         const saved = localStorage.getItem('frozen_calendar_events');
         return saved ? JSON.parse(saved) : [];
@@ -404,10 +379,19 @@
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
-      // Music Library State (Google Drive + YouTube)
+      // Clean, Validated Music Tracks State
       const [musicTracks, setMusicTracks] = useState(() => {
-        const saved = localStorage.getItem('frozen_music_tracks');
-        return saved ? JSON.parse(saved) : [];
+        try {
+          const saved = localStorage.getItem('frozen_music_tracks');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            // Only use cache if it actually contains tracks with titles
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
+              return parsed;
+            }
+          }
+        } catch(e) {}
+        return [];
       });
       const [isLoadingMusic, setIsLoadingMusic] = useState(false);
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
@@ -415,7 +399,8 @@
       const [audioPlaybackRate, setAudioPlaybackRate] = useState(1.0);
       const [audioCurrentTime, setAudioCurrentTime] = useState(0);
       const [audioDuration, setAudioDuration] = useState(0);
-      const [musicTabSubView, setMusicTabSubView] = useState('drive'); // 'drive' vs 'youtube'
+      const [audioError, setAudioError] = useState(false);
+      const [musicTabSubView, setMusicTabSubView] = useState('drive');
       const audioRef = useRef(null);
 
       const [isEditingCall, setIsEditingCall] = useState(false);
@@ -433,7 +418,6 @@
       });
       const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
 
-      // Tab Navigator with GA4 Page View Tracking
       const navigateToTab = (tabId) => {
         setActiveTab(tabId);
         window.location.hash = tabId;
@@ -458,13 +442,6 @@
           }
         };
         window.addEventListener('hashchange', handleHashChange);
-        
-        trackAnalyticsEvent('page_view', {
-          page_title: TAB_INFO[activeTab]?.label || activeTab,
-          page_location: window.location.href,
-          page_path: '/#' + activeTab
-        });
-
         return () => window.removeEventListener('hashchange', handleHashChange);
       }, []);
 
@@ -476,7 +453,6 @@
         });
       };
 
-      // Resilient Cast Fetcher
       const loadLiveCast = async () => {
         if (actorList.length === 0) setIsLoadingCast(true);
         setCastError(null);
@@ -495,9 +471,7 @@
               }
             }
           }
-        } catch (err) {
-          console.warn("Backend proxy failed for cast, falling back to direct CSV...", err);
-        }
+        } catch (err) {}
 
         try {
           const fallbackRes = await fetch(`${DIRECT_CAST_CSV_URL}&t=${Date.now()}`);
@@ -524,12 +498,11 @@
           if (parsed.length > 0) {
             setActorList(parsed);
             localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
-          } else {
-            setCastError("Cast spreadsheet returned no actor rows.");
           }
         } catch (fallbackErr) {
-          console.error("Both cast fetch methods failed:", fallbackErr);
-          setCastError("Could not load cast roster. Please check network connection.");
+          if (actorList.length === 0) {
+            setCastError("Could not load cast roster.");
+          }
         } finally {
           setIsLoadingCast(false);
         }
@@ -569,13 +542,12 @@
             localStorage.setItem('frozen_calendar_events', JSON.stringify(data));
           }
         } catch (err) {
-          console.log("Could not load calendar feed:", err);
         } finally {
           setIsLoadingCalendar(false);
         }
       };
 
-      // Fetch Music from Google Drive Folder via Apps Script
+      // Fetch Music from Google Drive Folder
       const fetchMusicLibrary = async () => {
         if (!CALLBOARD_BACKEND_URL) return;
         setIsLoadingMusic(true);
@@ -584,11 +556,15 @@
           const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getMusic&t=${Date.now()}`);
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setMusicTracks(data);
-            localStorage.setItem('frozen_music_tracks', JSON.stringify(data));
+            // Filter out any entries without proper names
+            const valid = data.filter(t => t && (t.title || t.name));
+            if (valid.length > 0) {
+              setMusicTracks(valid);
+              localStorage.setItem('frozen_music_tracks', JSON.stringify(valid));
+            }
           }
         } catch (err) {
-          console.log("Could not load dynamic music list from Apps Script:", err);
+          console.log("Could not load dynamic music list:", err);
         } finally {
           setIsLoadingMusic(false);
         }
@@ -609,16 +585,28 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      // Audio Player Controls
+      // Audio Player Handlers
+      const currentTrack = musicTracks[activeTrackIndex] || null;
+
       const playTrack = (index) => {
         setActiveTrackIndex(index);
         setIsPlayingAudio(true);
-        if (audioRef.current) {
-          audioRef.current.playbackRate = audioPlaybackRate;
-          audioRef.current.play().catch(e => console.log("Audio play error:", e));
-        }
+        setAudioError(false);
+        
+        setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.playbackRate = audioPlaybackRate;
+            audioRef.current.load();
+            audioRef.current.play().catch(e => {
+              console.log("Direct play restricted:", e);
+              setAudioError(true);
+              setIsPlayingAudio(false);
+            });
+          }
+        }, 50);
+
         if (musicTracks[index]) {
-          trackAnalyticsEvent('play_rehearsal_track', { track_name: musicTracks[index].name });
+          trackAnalyticsEvent('play_rehearsal_track', { track_name: musicTracks[index].title || musicTracks[index].name });
         }
       };
 
@@ -628,8 +616,14 @@
           audioRef.current.pause();
           setIsPlayingAudio(false);
         } else {
-          audioRef.current.play().catch(e => console.log(e));
-          setIsPlayingAudio(true);
+          setAudioError(false);
+          audioRef.current.play().then(() => {
+            setIsPlayingAudio(true);
+          }).catch(e => {
+            console.log("Play failed:", e);
+            setAudioError(true);
+            setIsPlayingAudio(false);
+          });
         }
       };
 
@@ -638,6 +632,13 @@
         if (audioRef.current) {
           audioRef.current.playbackRate = rate;
         }
+      };
+
+      const formatAudioTime = (sec) => {
+        if (isNaN(sec) || !isFinite(sec)) return "0:00";
+        const mins = Math.floor(sec / 60);
+        const rem = Math.floor(sec % 60);
+        return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
       };
 
       const handleLogin = async (e) => {
@@ -818,9 +819,7 @@
             } else {
               trackAnalyticsEvent('publish_rehearsal_call', { title: newEntry.title });
             }
-          } catch (err) {
-            console.error('Error posting to backend', err);
-          }
+          } catch (err) {}
         }
       };
 
@@ -843,9 +842,7 @@
               } else {
                 trackAnalyticsEvent('delete_rehearsal_call', { id });
               }
-            } catch (err) {
-              console.error('Error sending delete to backend', err);
-            }
+            } catch (err) {}
           }
         }
       };
@@ -903,16 +900,6 @@
         });
         return groups;
       }, [visibleCalendarEvents]);
-
-      // Active track object
-      const currentTrack = musicTracks[activeTrackIndex] || null;
-
-      const formatAudioTime = (sec) => {
-        if (isNaN(sec)) return "0:00";
-        const mins = Math.floor(sec / 60);
-        const rem = Math.floor(sec % 60);
-        return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
-      };
 
       return (
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -999,9 +986,7 @@
             })}
           </nav>
 
-          {/* ======================================================== */}
-          {/* TAB 1: CALL BOARD & REHEARSAL CALLS                      */}
-          {/* ======================================================== */}
+          {/* TAB 1: CALL BOARD */}
           {activeTab === 'callboard' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -1042,7 +1027,6 @@
                 )}
               </div>
 
-              {/* Call Cards List */}
               <div className="grid gap-5">
                 {filteredRehearsals.map((reh) => {
                   const isFullCast = (reh.type && reh.type.toLowerCase().includes('full cast')) || 
@@ -1161,23 +1145,13 @@
                     <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
                       Check back after Saturday rehearsals when targeted Wednesday calls are published by the director and stage management.
                     </p>
-                    {isAdmin && (
-                      <button
-                        onClick={openAddCall}
-                        className="mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-4 py-2 rounded-xl text-xs transition"
-                      >
-                        + Post First Notice
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 2: LIVE ACTOR CARDS (MYSTERY UNTIL CLICKED)          */}
-          {/* ======================================================== */}
+          {/* TAB 2: CAST MEMBERS */}
           {activeTab === 'cast' && (
             <div className="space-y-6">
               <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-cyan-950/60 p-5">
@@ -1199,7 +1173,6 @@
                 </div>
               </div>
 
-              {/* Sync Status Banner */}
               <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-cyan-400">
                 <div className="flex items-center gap-3">
                   <div className="text-2xl shrink-0">🎁</div>
@@ -1233,16 +1206,6 @@
                     </button>
                   )}
 
-                  {revealedCardIds.length > 0 && !allRevealed && (
-                    <button
-                      onClick={resetHiddenRoles}
-                      className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 flex items-center gap-1.5 transition"
-                      title="Re-hide revealed roles"
-                    >
-                      <span>🔒 Reset</span>
-                    </button>
-                  )}
-
                   <button
                     onClick={loadLiveCast}
                     disabled={isLoadingCast}
@@ -1254,7 +1217,6 @@
                 </div>
               </div>
 
-              {/* Filter Toolbar */}
               <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="w-full md:w-80">
                   <input
@@ -1283,18 +1245,14 @@
                 </div>
               </div>
 
-              {/* Actor Cards */}
               {isLoadingCast && actorList.length === 0 ? (
                 <div className="glass-card p-12 text-center text-cyan-300 rounded-3xl">
                   <div className="text-4xl animate-bounce mb-3">❄️</div>
-                  <p className="font-cinzel text-lg">Fetching Latest Cast From Google Sheets...</p>
+                  <p className="font-cinzel text-lg">Fetching Latest Cast...</p>
                 </div>
               ) : castError && actorList.length === 0 ? (
                 <div className="glass-card p-8 text-center text-amber-300 rounded-3xl">
                   <p className="font-bold">{castError}</p>
-                  <button onClick={loadLiveCast} className="mt-3 bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs">
-                    Try Again
-                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1357,10 +1315,6 @@
                             </div>
                           )}
                         </div>
-
-                        <div className="mt-3 text-[10px] text-cyan-400/60 font-semibold text-right flex items-center justify-end gap-1 group-hover:text-cyan-300">
-                          <span>{isRevealed ? '🎉 View card fanfare' : '🎺 Tap to reveal & celebrate'}</span>
-                        </div>
                       </div>
                     );
                   })}
@@ -1369,9 +1323,7 @@
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 3: COSTUMES & WARDROBE                               */}
-          {/* ======================================================== */}
+          {/* TAB 3: COSTUMES */}
           {activeTab === 'costumes' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1392,15 +1344,13 @@
                 </div>
                 <h3 className="text-xl font-bold font-cinzel text-white">Costume Breakdown Coming Soon</h3>
                 <p className="text-xs md:text-sm text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
-                  The wardrobe coordinators are currently compiling the full costume plots, fittings schedule, and family-provided guidelines (shoes, tights, and base layers). They will appear here once ready!
+                  The wardrobe coordinators are currently compiling the full costume plots, fittings schedule, and family-provided guidelines.
                 </p>
               </div>
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (GOOGLE DRIVE + PLAYER)    */}
-          {/* ======================================================== */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (GOOGLE DRIVE + PLAYER) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1429,7 +1379,10 @@
                   </a>
 
                   <button
-                    onClick={fetchMusicLibrary}
+                    onClick={() => {
+                      localStorage.removeItem('frozen_music_tracks');
+                      fetchMusicLibrary();
+                    }}
                     disabled={isLoadingMusic}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
                   >
@@ -1439,7 +1392,7 @@
                 </div>
               </div>
 
-              {/* Source Mode Switcher: Google Drive Vault vs YouTube Playlist */}
+              {/* Source Switcher */}
               <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-2xl border border-cyan-900/80 w-fit">
                 <button
                   type="button"
@@ -1474,10 +1427,9 @@
                 </button>
               </div>
 
-              {/* VIEW A: DRIVE REHEARSAL AUDIO PLAYER */}
               {musicTabSubView === 'drive' && (
                 <div className="space-y-4">
-                  {/* Master Web Audio Player Card */}
+                  {/* Master Audio Card */}
                   {currentTrack && (
                     <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5">
@@ -1495,7 +1447,7 @@
                               NOW PLAYING
                             </span>
                             <h3 className="text-xl font-extrabold font-cinzel text-white leading-tight mt-1">
-                              {currentTrack.name}
+                              {currentTrack.title || currentTrack.name}
                             </h3>
                             <p className="text-xs text-slate-400 font-mono mt-0.5">
                               {currentTrack.filename}
@@ -1503,7 +1455,6 @@
                           </div>
                         </div>
 
-                        {/* Speed Controls & Download */}
                         <div className="flex items-center gap-2 self-start md:self-center">
                           <span className="text-[11px] font-bold text-slate-400 mr-1">Speed:</span>
                           {[0.8, 1.0, 1.2].map(rate => (
@@ -1524,7 +1475,7 @@
                             href={currentTrack.downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.name })}
+                            onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.title || currentTrack.name })}
                             className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition"
                             title="Download Track"
                           >
@@ -1533,13 +1484,15 @@
                         </div>
                       </div>
 
-                      {/* Scrubber & Native Audio Controller */}
+                      {/* Scrubber */}
                       <div className="mt-5 space-y-2">
                         <audio
                           ref={audioRef}
                           src={currentTrack.streamUrl}
+                          crossOrigin="anonymous"
                           onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
                           onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
+                          onError={() => setAudioError(true)}
                           onEnded={() => {
                             if (activeTrackIndex < musicTracks.length - 1) {
                               playTrack(activeTrackIndex + 1);
@@ -1550,7 +1503,20 @@
                           className="w-full hidden"
                         />
 
-                        {/* Custom Progress Bar */}
+                        {audioError && (
+                          <div className="bg-amber-950/60 border border-amber-600/60 p-3 rounded-xl text-xs text-amber-200 flex items-center justify-between gap-3">
+                            <span>Browser playback restricted by Google Drive. Click to play in native Drive player or download:</span>
+                            <a
+                              href={currentTrack.previewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg whitespace-nowrap"
+                            >
+                              Open Drive Player ↗
+                            </a>
+                          </div>
+                        )}
+
                         <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
                           <span>{formatAudioTime(audioCurrentTime)}</span>
                           <input
@@ -1582,6 +1548,7 @@
                       <div className="divide-y divide-slate-800/60">
                         {musicTracks.map((track, idx) => {
                           const isActive = idx === activeTrackIndex;
+                          const displayName = track.title || track.name || track.filename;
 
                           return (
                             <div
@@ -1604,7 +1571,7 @@
                                   <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
                                     isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
                                   }`}>
-                                    {track.name}
+                                    {displayName}
                                   </h4>
                                   <span className="text-[10px] text-slate-400 font-mono">
                                     {track.filename}
@@ -1630,7 +1597,7 @@
                                   rel="noopener noreferrer"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    trackAnalyticsEvent('download_track_click', { track_name: track.name });
+                                    trackAnalyticsEvent('download_track_click', { track_name: displayName });
                                   }}
                                   className="text-xs text-slate-400 hover:text-white p-1.5"
                                   title="Download"
@@ -1645,17 +1612,19 @@
                     ) : (
                       <div className="py-12 text-center text-slate-400">
                         <div className="text-3xl mb-2">🎵</div>
-                        <p className="font-cinzel text-white text-base">Initial Music Track Connecting...</p>
-                        <p className="text-xs mt-1 max-w-md mx-auto">
-                          Click "Sync Tracks" above to load all songs uploaded to your Google Drive folder.
-                        </p>
+                        <p className="font-cinzel text-white text-base">Connecting to Google Drive Audio Vault...</p>
+                        <button
+                          onClick={fetchMusicLibrary}
+                          className="mt-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition"
+                        >
+                          Fetch Drive Files
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* VIEW B: YOUTUBE PLAYLIST STREAM */}
               {musicTabSubView === 'youtube' && (
                 <div className="glass-card rounded-3xl overflow-hidden p-3 md:p-5 border border-cyan-500/20 shadow-2xl">
                   <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
@@ -1676,9 +1645,7 @@
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 5: CHOREOGRAPHY & BLOCKING VAULT                     */}
-          {/* ======================================================== */}
+          {/* TAB 5: CHOREOGRAPHY */}
           {activeTab === 'videos' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -1705,13 +1672,10 @@
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* TAB 6: MASTER SCHEDULE & CALENDAR                        */}
-          {/* ======================================================== */}
+          {/* TAB 6: MASTER SCHEDULE & CALENDAR */}
           {activeTab === 'calendar' && (
             <div className="space-y-6">
               <div className="glass-card p-6 rounded-3xl border border-cyan-500/20 shadow-xl">
-                {/* Header & Subscriptions */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-6 border-b border-cyan-900/60">
                   <div>
                     <span className="text-[11px] uppercase tracking-widest text-cyan-400 font-bold bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
@@ -1758,7 +1722,6 @@
                   </div>
                 </div>
 
-                {/* Filter and View Toggle Controls */}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
                   <div className="w-full md:w-80">
                     <input
@@ -1770,7 +1733,6 @@
                     />
                   </div>
 
-                  {/* View Mode Switcher */}
                   <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-cyan-900/80 w-full md:w-auto justify-center">
                     <button
                       type="button"
@@ -1803,7 +1765,6 @@
                   </div>
                 </div>
 
-                {/* Event Groups List */}
                 {isLoadingCalendar && calendarEvents.length === 0 ? (
                   <div className="p-12 text-center text-cyan-300">
                     <div className="text-3xl animate-bounce mb-2">🗓️</div>
@@ -1892,7 +1853,6 @@
                       </div>
                     ))}
 
-                    {/* View All Prompt when in Next 8 Mode */}
                     {calendarViewMode === 'next8' && calendarEvents.length > 8 && !calendarSearch && (
                       <div className="pt-4 text-center">
                         <button
@@ -1921,9 +1881,7 @@
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* MODAL: CALENDAR EVENT DETAILS MODAL                      */}
-          {/* ======================================================== */}
+          {/* CALENDAR DETAILS MODAL */}
           {selectedCalendarEvent && (() => {
             const ev = selectedCalendarEvent;
             const start = new Date(ev.startTime);
@@ -2048,9 +2006,7 @@
             );
           })()}
 
-          {/* ======================================================== */}
-          {/* CELEBRATION MODAL                                        */}
-          {/* ======================================================== */}
+          {/* CELEBRATION MODAL */}
           {celebrationTarget && (
             <div 
               className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
@@ -2125,18 +2081,12 @@
                       Close Card
                     </button>
                   </div>
-
-                  <div className="mt-4 text-[10px] text-slate-500">
-                    📸 Perfect photo opportunity! Take a screenshot to share with family & friends.
-                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* MODAL: ADMIN LOGIN                                       */}
-          {/* ======================================================== */}
+          {/* ADMIN LOGIN MODAL */}
           {showLoginModal && (
             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="glass-card max-w-sm w-full p-6 rounded-3xl border border-cyan-500/40 shadow-2xl relative">
@@ -2179,9 +2129,7 @@
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* MODAL: POST / EDIT REHEARSAL CALL                        */}
-          {/* ======================================================== */}
+          {/* EDIT CALL MODAL */}
           {isEditingCall && (
             <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
               <div className="glass-card max-w-2xl w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl my-8">
@@ -2235,7 +2183,7 @@
                           required
                           value={editCallData.customType}
                           onChange={(e) => setEditCallData({...editCallData, customType: e.target.value})}
-                          placeholder="Type custom call category (e.g. Tap Intensive)"
+                          placeholder="Type custom call category"
                           className="w-full bg-slate-900 border border-cyan-500 rounded-xl p-2.5 text-cyan-200 font-semibold"
                         />
                       ) : (
@@ -2264,12 +2212,12 @@
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-bold mb-1">Room / Location (URLs work here)</label>
+                      <label className="block text-slate-300 font-bold mb-1">Room / Location</label>
                       <input 
                         type="text"
                         value={editCallData.location}
                         onChange={(e) => setEditCallData({...editCallData, location: e.target.value})}
-                        placeholder="e.g., Main Stage or https://meet.google.com/..."
+                        placeholder="e.g., Main Stage"
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
                       />
                     </div>
@@ -2341,18 +2289,11 @@
                         );
                       })}
                     </div>
-
-                    <div className="pt-2 border-t border-slate-800 text-xs">
-                      <span className="text-slate-400">Currently Called ({editCallData.calledRoles.length}): </span>
-                      <span className="text-cyan-200 font-semibold">
-                        {editCallData.calledRoles.length > 0 ? editCallData.calledRoles.join(', ') : 'None'}
-                      </span>
-                    </div>
                   </div>
 
                   <div>
                     <label className="block text-slate-300 font-bold mb-1">
-                      Focus Scenes / Music <span className="font-normal text-slate-400">(Comma-separated)</span>
+                      Focus Scenes / Music
                     </label>
                     <input 
                       type="text"
@@ -2364,7 +2305,7 @@
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">Production Notes for Parents/Cast (URLs work here)</label>
+                    <label className="block text-slate-300 font-bold mb-1">Production Notes for Parents/Cast</label>
                     <textarea 
                       rows="2"
                       value={editCallData.notes}
