@@ -95,17 +95,17 @@
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
 
-    // Direct high-reliability audio route
-    const AUDIO_TRACK_URL = "https://raw.githubusercontent.com/Cheeseman25/FrozenJR2026/main/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3";
+    // Direct GitHub Pages Relative Audio Stream Path
+    const RELATIVE_TRACK_PATH = "./music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3";
 
-    const HARDCODED_TRACKS = [
+    const DEFAULT_AUDIO_TRACKS = [
       {
-        id: "track-let-the-sun-shine-on",
+        id: "track-sun-shine-on",
         title: "Let the Sun Shine On",
         filename: "Let the Sun Shine On.mp3",
         category: "Rehearsal Tracks",
-        streamUrl: AUDIO_TRACK_URL,
-        downloadUrl: AUDIO_TRACK_URL
+        streamUrl: RELATIVE_TRACK_PATH,
+        downloadUrl: RELATIVE_TRACK_PATH
       }
     ];
 
@@ -402,13 +402,14 @@
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
-      // Music Library State (Always reliable from GitHub CDN)
-      const [musicTracks, setMusicTracks] = useState(HARDCODED_TRACKS);
+      // Clean Audio Tracks from relative path
+      const [musicTracks, setMusicTracks] = useState(DEFAULT_AUDIO_TRACKS);
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
       const [isPlayingAudio, setIsPlayingAudio] = useState(false);
       const [audioPlaybackRate, setAudioPlaybackRate] = useState(1.0);
       const [audioCurrentTime, setAudioCurrentTime] = useState(0);
       const [audioDuration, setAudioDuration] = useState(0);
+      const [audioStatusNotice, setAudioStatusNotice] = useState(null);
       const [musicTabSubView, setMusicTabSubView] = useState('drive');
       const audioRef = useRef(null);
 
@@ -570,36 +571,33 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      const currentTrack = musicTracks[activeTrackIndex] || HARDCODED_TRACKS[0];
+      const currentTrack = musicTracks[activeTrackIndex] || DEFAULT_AUDIO_TRACKS[0];
 
-      // Direct, Unblocked Audio Playback Function
+      // Audio Control Actions
       const handlePlayTrack = (index) => {
         const audio = audioRef.current;
         if (!audio) return;
 
         setActiveTrackIndex(index);
-        const selected = musicTracks[index];
+        setAudioStatusNotice(null);
 
-        // Ensure source is loaded directly without timeout
-        if (audio.src !== selected.streamUrl) {
-          audio.src = selected.streamUrl;
-          audio.load();
+        const track = musicTracks[index];
+        if (audio.src !== track.streamUrl) {
+          audio.src = track.streamUrl;
         }
 
         audio.playbackRate = audioPlaybackRate;
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              setIsPlayingAudio(true);
-            })
-            .catch((err) => {
-              console.warn("Autoplay interaction blocked:", err);
-              setIsPlayingAudio(false);
-            });
-        }
+        audio.play()
+          .then(() => {
+            setIsPlayingAudio(true);
+          })
+          .catch((err) => {
+            console.error("Audio playback error:", err);
+            setAudioStatusNotice("Audio buffering or waiting for gesture. Use player below:");
+            setIsPlayingAudio(false);
+          });
 
-        trackAnalyticsEvent('play_rehearsal_track', { track_name: selected.title });
+        trackAnalyticsEvent('play_rehearsal_track', { track_name: track.title });
       };
 
       const handleTogglePlayPause = () => {
@@ -610,14 +608,17 @@
           audio.pause();
           setIsPlayingAudio(false);
         } else {
+          setAudioStatusNotice(null);
           if (!audio.src || audio.src === window.location.href) {
             audio.src = currentTrack.streamUrl;
-            audio.load();
           }
           audio.playbackRate = audioPlaybackRate;
           audio.play()
             .then(() => setIsPlayingAudio(true))
-            .catch((err) => console.log("Play failed:", err));
+            .catch((err) => {
+              console.error("Play toggle error:", err);
+              setAudioStatusNotice("Click play directly on the audio controls bar below:");
+            });
         }
       };
 
@@ -873,9 +874,9 @@
         const q = calendarSearch.toLowerCase().trim();
         const filtered = calendarEvents.filter(ev => {
           if (!q) return true;
-          return (ev.title && ev.title.toLowerCase().includes(q)) || 
-                 (ev.location && ev.location.toLowerCase().includes(q)) ||
-                 (ev.description && ev.description.toLowerCase().includes(q));
+          return (ev.title && ev.title.toLowerCase().includes(query)) || 
+                 (ev.location && ev.location.toLowerCase().includes(query)) ||
+                 (ev.description && ev.description.toLowerCase().includes(query));
         });
 
         if (calendarViewMode === 'next8' && !q) {
@@ -1137,7 +1138,7 @@
                     <div className="text-4xl mb-3">📋</div>
                     <h4 className="text-lg font-bold font-cinzel text-white">No Active Rehearsal Calls</h4>
                     <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                      Check back after Saturday rehearsals when targeted Wednesday calls are published by the director and stage management.
+                      Check back after Saturday rehearsals when targeted Wednesday calls are published.
                     </p>
                   </div>
                 )}
@@ -1344,7 +1345,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (DIRECT STREAM FROM GITHUB) */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1360,7 +1361,7 @@
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <a
-                    href={`https://github.com/Cheeseman25/FrozenJR2026/tree/main/music`}
+                    href="https://github.com/Cheeseman25/FrozenJR2026/tree/main/music"
                     target="_blank"
                     rel="noreferrer"
                     className="bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-800 transition flex items-center gap-2 shadow-md"
@@ -1465,18 +1466,28 @@
                       </div>
                     </div>
 
-                    {/* Active Audio Node */}
+                    {audioStatusNotice && (
+                      <div className="mt-3 p-3 rounded-xl bg-amber-950/80 border border-amber-600/70 text-xs text-amber-200">
+                        {audioStatusNotice}
+                      </div>
+                    )}
+
+                    {/* Active Native Audio Element */}
                     <div className="mt-5 space-y-3">
                       <audio
                         ref={audioRef}
                         src={currentTrack.streamUrl}
-                        preload="auto"
+                        preload="metadata"
                         onPlay={() => setIsPlayingAudio(true)}
                         onPause={() => setIsPlayingAudio(false)}
                         onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
                         onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
+                        onError={(e) => {
+                          console.error("Audio error event:", e);
+                          setAudioStatusNotice("Audio format or path unavailable. Check network tab.");
+                        }}
                         onEnded={() => setIsPlayingAudio(false)}
-                        className="w-full h-10 mt-2 block rounded-lg accent-cyan-400"
+                        className="w-full h-11 block rounded-xl bg-slate-950/90 accent-cyan-400"
                         controls
                       />
 
