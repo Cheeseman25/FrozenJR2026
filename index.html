@@ -94,7 +94,24 @@
 
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
-    const GOOGLE_DRIVE_MUSIC_FOLDER_URL = "https://drive.google.com/drive/folders/1WpVSq_wCG0RhjirsZFZjqOR3w50j4RPe?usp=sharing";
+
+    // GitHub Repository Configuration for Direct Audio Hosting
+    const GITHUB_REPO_OWNER = "Cheeseman25";
+    const GITHUB_REPO_NAME = "FrozenJR2026";
+    const GITHUB_PAGES_BASE = `https://${GITHUB_REPO_OWNER.toLowerCase()}.github.io/${GITHUB_REPO_NAME}`;
+
+    // Seed Track matching your exact folder path
+    const SEED_MUSIC_TRACKS = [
+      {
+        id: "git-track-1",
+        title: "Let the Sun Shine On",
+        filename: "Let the Sun Shine On.mp3",
+        category: "Rehearsal Tracks",
+        relativePath: "music/Rehearsal Tracks/Let the Sun Shine On.mp3",
+        streamUrl: `${GITHUB_PAGES_BASE}/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3`,
+        downloadUrl: `${GITHUB_PAGES_BASE}/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3`
+      }
+    ];
 
     function trackAnalyticsEvent(eventName, params = {}) {
       if (typeof window.gtag === 'function') {
@@ -116,6 +133,18 @@
       const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (ymd) {
         const dt = new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
+        if (!isNaN(dt.getTime())) {
+          return dt.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+        }
+      }
+      const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mdy) {
+        const dt = new Date(parseInt(mdy[3], 10), parseInt(mdy[1], 10) - 1, parseInt(mdy[2], 10));
         if (!isNaN(dt.getTime())) {
           return dt.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -379,20 +408,20 @@
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
-      // Cleaned Music Library State
+      // Music Library State: Loaded from Seed + LocalStorage Cache
       const [musicTracks, setMusicTracks] = useState(() => {
         try {
           const saved = localStorage.getItem('frozen_music_tracks');
           if (saved) {
             const parsed = JSON.parse(saved);
-            // Strict check: make sure tracks are not rehearsal notices
             if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].streamUrl && !parsed[0].calledRoles) {
               return parsed;
             }
           }
         } catch(e) {}
-        return [];
+        return SEED_MUSIC_TRACKS;
       });
+
       const [isLoadingMusic, setIsLoadingMusic] = useState(false);
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
       const [selectedMusicCategory, setSelectedMusicCategory] = useState('ALL');
@@ -400,8 +429,7 @@
       const [audioPlaybackRate, setAudioPlaybackRate] = useState(1.0);
       const [audioCurrentTime, setAudioCurrentTime] = useState(0);
       const [audioDuration, setAudioDuration] = useState(0);
-      const [audioError, setAudioError] = useState(false);
-      const [musicTabSubView, setMusicTabSubView] = useState('drive');
+      const [musicTabSubView, setMusicTabSubView] = useState('drive'); // 'drive' is the MP3 Vault
       const audioRef = useRef(null);
 
       const [isEditingCall, setIsEditingCall] = useState(false);
@@ -548,30 +576,53 @@
         }
       };
 
-      // Fetch Music from Google Drive Folder
-      const fetchMusicLibrary = async () => {
-        if (!CALLBOARD_BACKEND_URL) return;
+      // GitHub Music Scanner: Discovers all audio tracks in the repo's music directory
+      const scanGitHubMusicFolder = async () => {
         setIsLoadingMusic(true);
+        const discovered = [];
+
+        async function inspectPath(folderPath, categoryName) {
+          try {
+            const apiUrl = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${encodeURIComponent(folderPath).replace(/%2F/g, '/')}`;
+            const res = await fetch(apiUrl);
+            if (!res.ok) return;
+            const items = await res.json();
+
+            if (Array.isArray(items)) {
+              for (const item of items) {
+                if (item.type === 'file' && item.name.match(/\.(mp3|m4a|wav|ogg)$/i)) {
+                  const rawUrl = `${GITHUB_PAGES_BASE}/${item.path.split('/').map(encodeURIComponent).join('/')}`;
+                  discovered.push({
+                    id: `git-${item.sha}`,
+                    title: item.name.replace(/\.(mp3|m4a|wav|ogg)$/i, ''),
+                    filename: item.name,
+                    category: categoryName || 'Rehearsal Tracks',
+                    relativePath: item.path,
+                    streamUrl: rawUrl,
+                    downloadUrl: rawUrl
+                  });
+                } else if (item.type === 'dir') {
+                  await inspectPath(item.path, item.name);
+                }
+              }
+            }
+          } catch(err) {
+            console.log("GitHub inspection error:", err);
+          }
+        }
 
         try {
-          const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getMusic&t=${Date.now()}`);
-          const data = await res.json();
-          
-          let list = [];
-          if (data && data.status === 'success' && Array.isArray(data.tracks)) {
-            list = data.tracks;
-          } else if (Array.isArray(data)) {
-            list = data;
+          await inspectPath('music', 'Rehearsal Tracks');
+          if (discovered.length > 0) {
+            discovered.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' }));
+            setMusicTracks(discovered);
+            localStorage.setItem('frozen_music_tracks', JSON.stringify(discovered));
+          } else {
+            setMusicTracks(SEED_MUSIC_TRACKS);
+            localStorage.setItem('frozen_music_tracks', JSON.stringify(SEED_MUSIC_TRACKS));
           }
-
-          // Strict filter: must have streamUrl or previewUrl and NOT have calledRoles
-          const clean = list.filter(t => t && (t.streamUrl || t.previewUrl) && !t.calledRoles && !t.focusScenes);
-          if (clean.length > 0) {
-            setMusicTracks(clean);
-            localStorage.setItem('frozen_music_tracks', JSON.stringify(clean));
-          }
-        } catch (err) {
-          console.log("Could not load dynamic music list:", err);
+        } catch (e) {
+          setMusicTracks(SEED_MUSIC_TRACKS);
         } finally {
           setIsLoadingMusic(false);
         }
@@ -581,7 +632,7 @@
         loadLiveCast();
         fetchBackendRehearsals();
         fetchCalendarEvents();
-        fetchMusicLibrary();
+        scanGitHubMusicFolder();
       }, []);
 
       useEffect(() => {
@@ -592,7 +643,7 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      // Categories inside music folder (e.g., "Practice Tracks", "Performance Tracks")
+      // Category Tabs inside Music Vault
       const availableMusicCategories = useMemo(() => {
         const cats = Array.from(new Set(musicTracks.map(t => t.category).filter(Boolean)));
         return ['ALL', ...cats];
@@ -608,14 +659,12 @@
       const playTrack = (index) => {
         setActiveTrackIndex(index);
         setIsPlayingAudio(true);
-        setAudioError(false);
         
         setTimeout(() => {
           if (audioRef.current) {
             audioRef.current.playbackRate = audioPlaybackRate;
-            audioRef.current.load();
             audioRef.current.play().catch(e => {
-              setAudioError(true);
+              console.log("Audio play error:", e);
               setIsPlayingAudio(false);
             });
           }
@@ -632,11 +681,10 @@
           audioRef.current.pause();
           setIsPlayingAudio(false);
         } else {
-          setAudioError(false);
           audioRef.current.play().then(() => {
             setIsPlayingAudio(true);
           }).catch(e => {
-            setAudioError(true);
+            console.log("Play failed:", e);
             setIsPlayingAudio(false);
           });
         }
@@ -1365,7 +1413,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (GOOGLE DRIVE + PLAYER) */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (DIRECT GITHUB CDN AUDIO STREAM) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1375,34 +1423,33 @@
                   </span>
                   <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Show Music & Guide Vocals</h3>
                   <p className="text-xs text-slate-300">
-                    Stream and download high-quality rehearsal tracks served directly from our production drive.
+                    Stream and download high-quality rehearsal tracks served directly from our GitHub repository.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <a
-                    href={GOOGLE_DRIVE_MUSIC_FOLDER_URL}
+                    href={`https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/tree/main/music`}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={() => trackAnalyticsEvent('open_google_drive_folder_click')}
                     className="bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-800 transition flex items-center gap-2 shadow-md"
                   >
                     <svg className="w-4 h-4 fill-current text-cyan-400" viewBox="0 0 24 24">
-                      <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
-                    <span>Open Drive Folder ↗</span>
+                    <span>View Repository Music ↗</span>
                   </a>
 
                   <button
                     onClick={() => {
                       localStorage.removeItem('frozen_music_tracks');
-                      fetchMusicLibrary();
+                      scanGitHubMusicFolder();
                     }}
                     disabled={isLoadingMusic}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
                   >
                     <span className={isLoadingMusic ? 'animate-spin' : ''}>↻</span>
-                    <span>Sync Tracks</span>
+                    <span>Sync Repository</span>
                   </button>
                 </div>
               </div>
@@ -1418,7 +1465,7 @@
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>🎧 Drive Rehearsal Tracks</span>
+                  <span>🎧 Rehearsal Audio Vault</span>
                   {musicTracks.length > 0 && (
                     <span className="text-[10px] bg-cyan-950 px-1.5 py-0.5 rounded-full border border-cyan-700">
                       {musicTracks.length}
@@ -1444,7 +1491,7 @@
 
               {musicTabSubView === 'drive' && (
                 <div className="space-y-4">
-                  {/* Category Filter Pills (Practice vs Performance Tracks) */}
+                  {/* Category Filter Pills */}
                   {availableMusicCategories.length > 2 && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       {availableMusicCategories.map(cat => (
@@ -1457,13 +1504,13 @@
                               : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
                           }`}
                         >
-                          {cat === 'ALL' ? 'All Folders' : cat}
+                          {cat === 'ALL' ? 'All Collections' : cat}
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {/* Master Audio Player Card */}
+                  {/* HTML5 Native Streaming Audio Player */}
                   {currentTrack && (
                     <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5">
@@ -1490,6 +1537,9 @@
                             <h3 className="text-xl font-extrabold font-cinzel text-white leading-tight">
                               {currentTrack.title || currentTrack.filename}
                             </h3>
+                            <p className="text-xs text-slate-400 font-mono mt-0.5">
+                              {currentTrack.filename}
+                            </p>
                           </div>
                         </div>
 
@@ -1511,10 +1561,11 @@
 
                           <a
                             href={currentTrack.downloadUrl}
+                            download={currentTrack.filename}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.title || currentTrack.filename })}
-                            className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition"
+                            className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition shadow-sm"
                             title="Download Track"
                           >
                             <span>⬇ Download</span>
@@ -1522,15 +1573,14 @@
                         </div>
                       </div>
 
-                      {/* Scrubber & Audio Element */}
+                      {/* Scrubber & Audio Tag */}
                       <div className="mt-5 space-y-2">
                         <audio
                           ref={audioRef}
                           src={currentTrack.streamUrl}
-                          crossOrigin="anonymous"
+                          preload="metadata"
                           onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
                           onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
-                          onError={() => setAudioError(true)}
                           onEnded={() => {
                             if (activeTrackIndex < filteredTracks.length - 1) {
                               playTrack(activeTrackIndex + 1);
@@ -1540,20 +1590,6 @@
                           }}
                           className="w-full hidden"
                         />
-
-                        {audioError && (
-                          <div className="bg-amber-950/60 border border-amber-600/60 p-3 rounded-xl text-xs text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <span>Direct browser audio stream restricted by Google Drive. Click below to open in Google's native player:</span>
-                            <a
-                              href={currentTrack.previewUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg whitespace-nowrap transition"
-                            >
-                              Open Drive Player ↗
-                            </a>
-                          </div>
-                        )}
 
                         <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
                           <span>{formatAudioTime(audioCurrentTime)}</span>
@@ -1578,7 +1614,7 @@
                   {/* Track List */}
                   <div className="glass-card p-5 rounded-3xl border border-cyan-500/20">
                     <div className="flex items-center justify-between pb-3 border-b border-cyan-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                      <span>Available Tracks ({filteredTracks.length})</span>
+                      <span>Tracks Available ({filteredTracks.length})</span>
                       <span>Action</span>
                     </div>
 
@@ -1612,7 +1648,7 @@
                                     }`}>
                                       {displayName}
                                     </h4>
-                                    {track.category && track.category !== 'Main' && (
+                                    {track.category && (
                                       <span className="text-[9px] uppercase font-bold text-cyan-400/80 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60">
                                         {track.category}
                                       </span>
@@ -1638,6 +1674,7 @@
                                 
                                 <a
                                   href={track.downloadUrl}
+                                  download={track.filename}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => {
@@ -1657,13 +1694,7 @@
                     ) : (
                       <div className="py-12 text-center text-slate-400">
                         <div className="text-3xl mb-2">🎵</div>
-                        <p className="font-cinzel text-white text-base">Scanning Google Drive Music Folders...</p>
-                        <button
-                          onClick={fetchMusicLibrary}
-                          className="mt-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition"
-                        >
-                          Fetch Drive Files
-                        </button>
+                        <p className="font-cinzel text-white text-base">No tracks found in repository.</p>
                       </div>
                     )}
                   </div>
