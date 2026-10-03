@@ -94,18 +94,17 @@
 
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
+    const GOOGLE_DRIVE_MUSIC_FOLDER_URL = "https://drive.google.com/drive/folders/1WpVSq_wCG0RhjirsZFZjqOR3w50j4RPe?usp=sharing";
 
-    // Direct GitHub Pages Relative Audio Stream Path
-    const RELATIVE_TRACK_PATH = "./music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3";
-
-    const DEFAULT_AUDIO_TRACKS = [
+    // Direct Native Google Streaming Registry
+    const PRODUCTION_AUDIO_TRACKS = [
       {
-        id: "track-sun-shine-on",
+        id: "1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp",
         title: "Let the Sun Shine On",
         filename: "Let the Sun Shine On.mp3",
-        category: "Rehearsal Tracks",
-        streamUrl: RELATIVE_TRACK_PATH,
-        downloadUrl: RELATIVE_TRACK_PATH
+        category: "Practice Tracks",
+        previewUrl: "https://drive.google.com/file/d/1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp/preview",
+        downloadUrl: "https://drive.google.com/uc?export=download&id=1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp"
       }
     ];
 
@@ -402,16 +401,24 @@
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
-      // Clean Audio Tracks from relative path
-      const [musicTracks, setMusicTracks] = useState(DEFAULT_AUDIO_TRACKS);
+      // Music Library State
+      const [musicTracks, setMusicTracks] = useState(() => {
+        try {
+          const saved = localStorage.getItem('frozen_music_tracks');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].previewUrl) {
+              return parsed;
+            }
+          }
+        } catch(e) {}
+        return PRODUCTION_AUDIO_TRACKS;
+      });
+
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
-      const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-      const [audioPlaybackRate, setAudioPlaybackRate] = useState(1.0);
-      const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-      const [audioDuration, setAudioDuration] = useState(0);
-      const [audioStatusNotice, setAudioStatusNotice] = useState(null);
+      const [selectedMusicCategory, setSelectedMusicCategory] = useState('ALL');
+      const [isLoadingMusic, setIsLoadingMusic] = useState(false);
       const [musicTabSubView, setMusicTabSubView] = useState('drive');
-      const audioRef = useRef(null);
 
       const [isEditingCall, setIsEditingCall] = useState(false);
       const [editCallData, setEditCallData] = useState({
@@ -557,10 +564,38 @@
         }
       };
 
+      // Automatic Drive Music Sync
+      const fetchMusicLibrary = async () => {
+        if (!CALLBOARD_BACKEND_URL) return;
+        setIsLoadingMusic(true);
+
+        try {
+          const res = await fetch(`${CALLBOARD_BACKEND_URL}?action=getMusic&t=${Date.now()}`);
+          const data = await res.json();
+          let list = [];
+          if (data && data.status === 'success' && Array.isArray(data.tracks)) {
+            list = data.tracks;
+          } else if (Array.isArray(data)) {
+            list = data;
+          }
+
+          const clean = list.filter(t => t && t.previewUrl && !t.calledRoles);
+          if (clean.length > 0) {
+            setMusicTracks(clean);
+            localStorage.setItem('frozen_music_tracks', JSON.stringify(clean));
+          }
+        } catch (err) {
+          console.log("Drive sync error:", err);
+        } finally {
+          setIsLoadingMusic(false);
+        }
+      };
+
       useEffect(() => {
         loadLiveCast();
         fetchBackendRehearsals();
         fetchCalendarEvents();
+        fetchMusicLibrary();
       }, []);
 
       useEffect(() => {
@@ -571,69 +606,21 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      const currentTrack = musicTracks[activeTrackIndex] || DEFAULT_AUDIO_TRACKS[0];
+      const availableMusicCategories = useMemo(() => {
+        const cats = Array.from(new Set(musicTracks.map(t => t.category).filter(Boolean)));
+        return ['ALL', ...cats];
+      }, [musicTracks]);
 
-      // Audio Control Actions
-      const handlePlayTrack = (index) => {
-        const audio = audioRef.current;
-        if (!audio) return;
+      const filteredTracks = useMemo(() => {
+        if (selectedMusicCategory === 'ALL') return musicTracks;
+        return musicTracks.filter(t => t.category === selectedMusicCategory);
+      }, [musicTracks, selectedMusicCategory]);
 
+      const currentTrack = musicTracks[activeTrackIndex] || PRODUCTION_AUDIO_TRACKS[0];
+
+      const selectTrack = (index) => {
         setActiveTrackIndex(index);
-        setAudioStatusNotice(null);
-
-        const track = musicTracks[index];
-        if (audio.src !== track.streamUrl) {
-          audio.src = track.streamUrl;
-        }
-
-        audio.playbackRate = audioPlaybackRate;
-        audio.play()
-          .then(() => {
-            setIsPlayingAudio(true);
-          })
-          .catch((err) => {
-            console.error("Audio playback error:", err);
-            setAudioStatusNotice("Audio buffering or waiting for gesture. Use player below:");
-            setIsPlayingAudio(false);
-          });
-
-        trackAnalyticsEvent('play_rehearsal_track', { track_name: track.title });
-      };
-
-      const handleTogglePlayPause = () => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        if (isPlayingAudio) {
-          audio.pause();
-          setIsPlayingAudio(false);
-        } else {
-          setAudioStatusNotice(null);
-          if (!audio.src || audio.src === window.location.href) {
-            audio.src = currentTrack.streamUrl;
-          }
-          audio.playbackRate = audioPlaybackRate;
-          audio.play()
-            .then(() => setIsPlayingAudio(true))
-            .catch((err) => {
-              console.error("Play toggle error:", err);
-              setAudioStatusNotice("Click play directly on the audio controls bar below:");
-            });
-        }
-      };
-
-      const changePlaybackRate = (rate) => {
-        setAudioPlaybackRate(rate);
-        if (audioRef.current) {
-          audioRef.current.playbackRate = rate;
-        }
-      };
-
-      const formatAudioTime = (sec) => {
-        if (isNaN(sec) || !sec || !isFinite(sec)) return "0:00";
-        const mins = Math.floor(sec / 60);
-        const rem = Math.floor(sec % 60);
-        return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
+        trackAnalyticsEvent('select_rehearsal_track', { track_name: musicTracks[index]?.title });
       };
 
       const handleLogin = async (e) => {
@@ -874,9 +861,9 @@
         const q = calendarSearch.toLowerCase().trim();
         const filtered = calendarEvents.filter(ev => {
           if (!q) return true;
-          return (ev.title && ev.title.toLowerCase().includes(query)) || 
-                 (ev.location && ev.location.toLowerCase().includes(query)) ||
-                 (ev.description && ev.description.toLowerCase().includes(query));
+          return (ev.title && ev.title.toLowerCase().includes(q)) || 
+                 (ev.location && ev.location.toLowerCase().includes(q)) ||
+                 (ev.description && ev.description.toLowerCase().includes(q));
         });
 
         if (calendarViewMode === 'next8' && !q) {
@@ -1345,7 +1332,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (DIRECT EMBEDDED STREAM) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1355,19 +1342,31 @@
                   </span>
                   <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Show Music & Guide Vocals</h3>
                   <p className="text-xs text-slate-300">
-                    High-quality rehearsal audio streams directly from our repository CDN.
+                    Direct streaming audio with full scrub controls and downloads.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <a
-                    href="https://github.com/Cheeseman25/FrozenJR2026/tree/main/music"
+                    href={GOOGLE_DRIVE_MUSIC_FOLDER_URL}
                     target="_blank"
                     rel="noreferrer"
                     className="bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-800 transition flex items-center gap-2 shadow-md"
                   >
-                    <span>View Music Repository ↗</span>
+                    <span>Open Drive Folder ↗</span>
                   </a>
+
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('frozen_music_tracks');
+                      fetchMusicLibrary();
+                    }}
+                    disabled={isLoadingMusic}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
+                  >
+                    <span className={isLoadingMusic ? 'animate-spin' : ''}>↻</span>
+                    <span>Sync Folder</span>
+                  </button>
                 </div>
               </div>
 
@@ -1406,113 +1405,83 @@
 
               {musicTabSubView === 'drive' && (
                 <div className="space-y-4">
-                  {/* Master Audio Controller Card */}
-                  <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5">
-                      <div className="flex items-center gap-4">
+                  {/* Category Filter */}
+                  {availableMusicCategories.length > 2 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {availableMusicCategories.map(cat => (
                         <button
-                          onClick={handleTogglePlayPause}
-                          className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-sky-400 hover:from-cyan-400 hover:to-sky-300 text-slate-950 flex items-center justify-center text-3xl font-black shadow-lg shadow-cyan-500/30 transition transform active:scale-95 shrink-0"
-                          title={isPlayingAudio ? "Pause" : "Play"}
+                          key={cat}
+                          onClick={() => setSelectedMusicCategory(cat)}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${
+                            selectedMusicCategory === cat
+                              ? 'bg-cyan-600 text-white shadow-md'
+                              : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
+                          }`}
                         >
-                          {isPlayingAudio ? "⏸" : "▶"}
+                          {cat === 'ALL' ? 'All Collections' : cat}
                         </button>
+                      ))}
+                    </div>
+                  )}
 
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
-                              {isPlayingAudio ? "NOW PLAYING" : "READY TO PLAY"}
-                            </span>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                              {currentTrack.category}
-                            </span>
-                          </div>
-                          <h3 className="text-xl font-extrabold font-cinzel text-white leading-tight">
-                            {currentTrack.title}
-                          </h3>
-                          <p className="text-xs text-slate-400 font-mono mt-0.5">
-                            {currentTrack.filename}
-                          </p>
+                  {/* Active Native Streaming Player Card */}
+                  <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5 mb-5">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                            STREAMING AUDIO
+                          </span>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            {currentTrack.category}
+                          </span>
                         </div>
+                        <h3 className="text-2xl font-extrabold font-cinzel text-white leading-tight">
+                          {currentTrack.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">
+                          {currentTrack.filename}
+                        </p>
                       </div>
 
-                      <div className="flex items-center gap-2 self-start md:self-center">
-                        <span className="text-[11px] font-bold text-slate-400 mr-1">Speed:</span>
-                        {[0.8, 1.0, 1.2].map(rate => (
-                          <button
-                            key={rate}
-                            onClick={() => changePlaybackRate(rate)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                              audioPlaybackRate === rate
-                                ? 'bg-cyan-500 text-slate-950 font-black shadow'
-                                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                            }`}
-                          >
-                            {rate}x
-                          </button>
-                        ))}
-
-                        <a
-                          href={currentTrack.downloadUrl}
-                          download={currentTrack.filename}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.title })}
-                          className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2.5 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition shadow-sm font-bold"
-                          title="Download Track"
-                        >
-                          <span>⬇ Download</span>
-                        </a>
-                      </div>
+                      <a
+                        href={currentTrack.downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-slate-900 hover:bg-slate-800 text-cyan-300 px-4 py-2.5 rounded-xl border border-cyan-900 text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-center shadow-md"
+                      >
+                        <span>⬇ Download Audio</span>
+                      </a>
                     </div>
 
-                    {audioStatusNotice && (
-                      <div className="mt-3 p-3 rounded-xl bg-amber-950/80 border border-amber-600/70 text-xs text-amber-200">
-                        {audioStatusNotice}
-                      </div>
-                    )}
-
-                    {/* Active Native Audio Element */}
-                    <div className="mt-5 space-y-3">
-                      <audio
-                        ref={audioRef}
-                        src={currentTrack.streamUrl}
-                        preload="metadata"
-                        onPlay={() => setIsPlayingAudio(true)}
-                        onPause={() => setIsPlayingAudio(false)}
-                        onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
-                        onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
-                        onError={(e) => {
-                          console.error("Audio error event:", e);
-                          setAudioStatusNotice("Audio format or path unavailable. Check network tab.");
-                        }}
-                        onEnded={() => setIsPlayingAudio(false)}
-                        className="w-full h-11 block rounded-xl bg-slate-950/90 accent-cyan-400"
-                        controls
-                      />
-
-                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
-                        <span>Current: {formatAudioTime(audioCurrentTime)}</span>
-                        <span>Total: {formatAudioTime(audioDuration)}</span>
-                      </div>
+                    {/* Google Drive Direct Media Engine */}
+                    <div className="w-full bg-slate-950/90 rounded-2xl p-2 border border-cyan-500/30 overflow-hidden shadow-inner">
+                      <iframe
+                        src={currentTrack.previewUrl}
+                        width="100%"
+                        height="80"
+                        allow="autoplay"
+                        className="w-full rounded-xl border-0"
+                        title={currentTrack.title}
+                      ></iframe>
                     </div>
                   </div>
 
-                  {/* Track List */}
+                  {/* Track Selection Table */}
                   <div className="glass-card p-5 rounded-3xl border border-cyan-500/20">
                     <div className="flex items-center justify-between pb-3 border-b border-cyan-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                      <span>Available Tracks ({musicTracks.length})</span>
+                      <span>Available Tracks ({filteredTracks.length})</span>
                       <span>Action</span>
                     </div>
 
                     <div className="divide-y divide-slate-800/60">
-                      {musicTracks.map((track, idx) => {
+                      {filteredTracks.map((track, idx) => {
                         const isActive = idx === activeTrackIndex;
 
                         return (
                           <div
                             key={track.id || idx}
-                            onClick={() => handlePlayTrack(idx)}
+                            onClick={() => selectTrack(musicTracks.indexOf(track))}
                             className={`py-3.5 px-3 rounded-2xl transition flex items-center justify-between gap-4 cursor-pointer group ${
                               isActive ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-900/60'
                             }`}
@@ -1523,7 +1492,7 @@
                                   ? 'bg-cyan-500 text-slate-950 font-black' 
                                   : 'bg-slate-900 border border-slate-800 text-cyan-400 group-hover:border-cyan-500'
                               }`}>
-                                {isActive && isPlayingAudio ? '▶' : `${idx + 1}`}
+                                {idx + 1}
                               </div>
 
                               <div>
@@ -1548,22 +1517,21 @@
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handlePlayTrack(idx);
+                                  selectTrack(musicTracks.indexOf(track));
                                 }}
-                                className="text-xs bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1"
+                                className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 ${
+                                  isActive
+                                    ? 'bg-cyan-500 text-slate-950 font-black'
+                                    : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700'
+                                }`}
                               >
-                                <span>{isActive && isPlayingAudio ? 'Playing' : 'Play Track'}</span>
+                                <span>{isActive ? 'Selected' : 'Load Track'}</span>
                               </button>
-                              
+
                               <a
                                 href={track.downloadUrl}
-                                download={track.filename}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  trackAnalyticsEvent('download_track_click', { track_name: track.title });
-                                }}
                                 className="text-xs text-slate-400 hover:text-white p-1.5"
                                 title="Download"
                               >
