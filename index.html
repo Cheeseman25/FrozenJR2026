@@ -95,21 +95,17 @@
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
     const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
 
-    // GitHub Repository Configuration for Direct Audio Hosting
-    const GITHUB_REPO_OWNER = "Cheeseman25";
-    const GITHUB_REPO_NAME = "FrozenJR2026";
-    const GITHUB_PAGES_BASE = `https://${GITHUB_REPO_OWNER.toLowerCase()}.github.io/${GITHUB_REPO_NAME}`;
+    // Direct high-reliability audio route
+    const AUDIO_TRACK_URL = "https://raw.githubusercontent.com/Cheeseman25/FrozenJR2026/main/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3";
 
-    // Seed Track matching your exact folder path
-    const SEED_MUSIC_TRACKS = [
+    const HARDCODED_TRACKS = [
       {
-        id: "git-track-1",
+        id: "track-let-the-sun-shine-on",
         title: "Let the Sun Shine On",
         filename: "Let the Sun Shine On.mp3",
         category: "Rehearsal Tracks",
-        relativePath: "music/Rehearsal Tracks/Let the Sun Shine On.mp3",
-        streamUrl: `${GITHUB_PAGES_BASE}/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3`,
-        downloadUrl: `${GITHUB_PAGES_BASE}/music/Rehearsal%20Tracks/Let%20the%20Sun%20Shine%20On.mp3`
+        streamUrl: AUDIO_TRACK_URL,
+        downloadUrl: AUDIO_TRACK_URL
       }
     ];
 
@@ -210,9 +206,7 @@
             osc.stop(now + note.delay + note.dur + 0.05);
           });
         });
-      } catch (err) {
-        console.log("Audio fanfare unsupported or blocked:", err);
-      }
+      } catch (err) {}
     }
 
     function launchFanfareCelebration() {
@@ -408,28 +402,14 @@
       const [calendarViewMode, setCalendarViewMode] = useState('next8');
       const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
-      // Music Library State: Loaded from Seed + LocalStorage Cache
-      const [musicTracks, setMusicTracks] = useState(() => {
-        try {
-          const saved = localStorage.getItem('frozen_music_tracks');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].streamUrl && !parsed[0].calledRoles) {
-              return parsed;
-            }
-          }
-        } catch(e) {}
-        return SEED_MUSIC_TRACKS;
-      });
-
-      const [isLoadingMusic, setIsLoadingMusic] = useState(false);
+      // Music Library State (Always reliable from GitHub CDN)
+      const [musicTracks, setMusicTracks] = useState(HARDCODED_TRACKS);
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
-      const [selectedMusicCategory, setSelectedMusicCategory] = useState('ALL');
       const [isPlayingAudio, setIsPlayingAudio] = useState(false);
       const [audioPlaybackRate, setAudioPlaybackRate] = useState(1.0);
       const [audioCurrentTime, setAudioCurrentTime] = useState(0);
       const [audioDuration, setAudioDuration] = useState(0);
-      const [musicTabSubView, setMusicTabSubView] = useState('drive'); // 'drive' is the MP3 Vault
+      const [musicTabSubView, setMusicTabSubView] = useState('drive');
       const audioRef = useRef(null);
 
       const [isEditingCall, setIsEditingCall] = useState(false);
@@ -576,63 +556,10 @@
         }
       };
 
-      // GitHub Music Scanner: Discovers all audio tracks in the repo's music directory
-      const scanGitHubMusicFolder = async () => {
-        setIsLoadingMusic(true);
-        const discovered = [];
-
-        async function inspectPath(folderPath, categoryName) {
-          try {
-            const apiUrl = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${encodeURIComponent(folderPath).replace(/%2F/g, '/')}`;
-            const res = await fetch(apiUrl);
-            if (!res.ok) return;
-            const items = await res.json();
-
-            if (Array.isArray(items)) {
-              for (const item of items) {
-                if (item.type === 'file' && item.name.match(/\.(mp3|m4a|wav|ogg)$/i)) {
-                  const rawUrl = `${GITHUB_PAGES_BASE}/${item.path.split('/').map(encodeURIComponent).join('/')}`;
-                  discovered.push({
-                    id: `git-${item.sha}`,
-                    title: item.name.replace(/\.(mp3|m4a|wav|ogg)$/i, ''),
-                    filename: item.name,
-                    category: categoryName || 'Rehearsal Tracks',
-                    relativePath: item.path,
-                    streamUrl: rawUrl,
-                    downloadUrl: rawUrl
-                  });
-                } else if (item.type === 'dir') {
-                  await inspectPath(item.path, item.name);
-                }
-              }
-            }
-          } catch(err) {
-            console.log("GitHub inspection error:", err);
-          }
-        }
-
-        try {
-          await inspectPath('music', 'Rehearsal Tracks');
-          if (discovered.length > 0) {
-            discovered.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' }));
-            setMusicTracks(discovered);
-            localStorage.setItem('frozen_music_tracks', JSON.stringify(discovered));
-          } else {
-            setMusicTracks(SEED_MUSIC_TRACKS);
-            localStorage.setItem('frozen_music_tracks', JSON.stringify(SEED_MUSIC_TRACKS));
-          }
-        } catch (e) {
-          setMusicTracks(SEED_MUSIC_TRACKS);
-        } finally {
-          setIsLoadingMusic(false);
-        }
-      };
-
       useEffect(() => {
         loadLiveCast();
         fetchBackendRehearsals();
         fetchCalendarEvents();
-        scanGitHubMusicFolder();
       }, []);
 
       useEffect(() => {
@@ -643,50 +570,54 @@
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
 
-      // Category Tabs inside Music Vault
-      const availableMusicCategories = useMemo(() => {
-        const cats = Array.from(new Set(musicTracks.map(t => t.category).filter(Boolean)));
-        return ['ALL', ...cats];
-      }, [musicTracks]);
+      const currentTrack = musicTracks[activeTrackIndex] || HARDCODED_TRACKS[0];
 
-      const filteredTracks = useMemo(() => {
-        if (selectedMusicCategory === 'ALL') return musicTracks;
-        return musicTracks.filter(t => t.category === selectedMusicCategory);
-      }, [musicTracks, selectedMusicCategory]);
+      // Direct, Unblocked Audio Playback Function
+      const handlePlayTrack = (index) => {
+        const audio = audioRef.current;
+        if (!audio) return;
 
-      const currentTrack = musicTracks[activeTrackIndex] || null;
-
-      const playTrack = (index) => {
         setActiveTrackIndex(index);
-        setIsPlayingAudio(true);
-        
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.playbackRate = audioPlaybackRate;
-            audioRef.current.play().catch(e => {
-              console.log("Audio play error:", e);
+        const selected = musicTracks[index];
+
+        // Ensure source is loaded directly without timeout
+        if (audio.src !== selected.streamUrl) {
+          audio.src = selected.streamUrl;
+          audio.load();
+        }
+
+        audio.playbackRate = audioPlaybackRate;
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsPlayingAudio(true);
+            })
+            .catch((err) => {
+              console.warn("Autoplay interaction blocked:", err);
               setIsPlayingAudio(false);
             });
-          }
-        }, 50);
-
-        if (musicTracks[index]) {
-          trackAnalyticsEvent('play_rehearsal_track', { track_name: musicTracks[index].title || musicTracks[index].filename });
         }
+
+        trackAnalyticsEvent('play_rehearsal_track', { track_name: selected.title });
       };
 
-      const togglePlayPause = () => {
-        if (!audioRef.current) return;
+      const handleTogglePlayPause = () => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
         if (isPlayingAudio) {
-          audioRef.current.pause();
+          audio.pause();
           setIsPlayingAudio(false);
         } else {
-          audioRef.current.play().then(() => {
-            setIsPlayingAudio(true);
-          }).catch(e => {
-            console.log("Play failed:", e);
-            setIsPlayingAudio(false);
-          });
+          if (!audio.src || audio.src === window.location.href) {
+            audio.src = currentTrack.streamUrl;
+            audio.load();
+          }
+          audio.playbackRate = audioPlaybackRate;
+          audio.play()
+            .then(() => setIsPlayingAudio(true))
+            .catch((err) => console.log("Play failed:", err));
         }
       };
 
@@ -698,7 +629,7 @@
       };
 
       const formatAudioTime = (sec) => {
-        if (isNaN(sec) || !isFinite(sec)) return "0:00";
+        if (isNaN(sec) || !sec || !isFinite(sec)) return "0:00";
         const mins = Math.floor(sec / 60);
         const rem = Math.floor(sec % 60);
         return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
@@ -1413,7 +1344,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (DIRECT GITHUB CDN AUDIO STREAM) */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (DIRECT STREAM FROM GITHUB) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1423,34 +1354,19 @@
                   </span>
                   <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Show Music & Guide Vocals</h3>
                   <p className="text-xs text-slate-300">
-                    Stream and download high-quality rehearsal tracks served directly from our GitHub repository.
+                    High-quality rehearsal audio streams directly from our repository CDN.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <a
-                    href={`https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/tree/main/music`}
+                    href={`https://github.com/Cheeseman25/FrozenJR2026/tree/main/music`}
                     target="_blank"
                     rel="noreferrer"
                     className="bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-800 transition flex items-center gap-2 shadow-md"
                   >
-                    <svg className="w-4 h-4 fill-current text-cyan-400" viewBox="0 0 24 24">
-                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                    </svg>
-                    <span>View Repository Music ↗</span>
+                    <span>View Music Repository ↗</span>
                   </a>
-
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem('frozen_music_tracks');
-                      scanGitHubMusicFolder();
-                    }}
-                    disabled={isLoadingMusic}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition disabled:opacity-50"
-                  >
-                    <span className={isLoadingMusic ? 'animate-spin' : ''}>↻</span>
-                    <span>Sync Repository</span>
-                  </button>
                 </div>
               </div>
 
@@ -1465,12 +1381,10 @@
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>🎧 Rehearsal Audio Vault</span>
-                  {musicTracks.length > 0 && (
-                    <span className="text-[10px] bg-cyan-950 px-1.5 py-0.5 rounded-full border border-cyan-700">
-                      {musicTracks.length}
-                    </span>
-                  )}
+                  <span>🎧 Rehearsal Audio Player</span>
+                  <span className="text-[10px] bg-cyan-950 px-1.5 py-0.5 rounded-full border border-cyan-700">
+                    {musicTracks.length}
+                  </span>
                 </button>
 
                 <button
@@ -1491,212 +1405,164 @@
 
               {musicTabSubView === 'drive' && (
                 <div className="space-y-4">
-                  {/* Category Filter Pills */}
-                  {availableMusicCategories.length > 2 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {availableMusicCategories.map(cat => (
+                  {/* Master Audio Controller Card */}
+                  <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5">
+                      <div className="flex items-center gap-4">
                         <button
-                          key={cat}
-                          onClick={() => setSelectedMusicCategory(cat)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${
-                            selectedMusicCategory === cat
-                              ? 'bg-cyan-600 text-white shadow-md'
-                              : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
-                          }`}
+                          onClick={handleTogglePlayPause}
+                          className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-sky-400 hover:from-cyan-400 hover:to-sky-300 text-slate-950 flex items-center justify-center text-3xl font-black shadow-lg shadow-cyan-500/30 transition transform active:scale-95 shrink-0"
+                          title={isPlayingAudio ? "Pause" : "Play"}
                         >
-                          {cat === 'ALL' ? 'All Collections' : cat}
+                          {isPlayingAudio ? "⏸" : "▶"}
                         </button>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* HTML5 Native Streaming Audio Player */}
-                  {currentTrack && (
-                    <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5">
-                        <div className="flex items-center gap-4">
-                          <button
-                            onClick={togglePlayPause}
-                            className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-sky-400 hover:from-cyan-400 hover:to-sky-300 text-slate-950 flex items-center justify-center text-2xl font-black shadow-lg shadow-cyan-500/30 transition transform active:scale-95 shrink-0"
-                            title={isPlayingAudio ? "Pause" : "Play"}
-                          >
-                            {isPlayingAudio ? "⏸" : "▶"}
-                          </button>
-
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
-                                NOW PLAYING
-                              </span>
-                              {currentTrack.category && (
-                                <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                                  {currentTrack.category}
-                                </span>
-                              )}
-                            </div>
-                            <h3 className="text-xl font-extrabold font-cinzel text-white leading-tight">
-                              {currentTrack.title || currentTrack.filename}
-                            </h3>
-                            <p className="text-xs text-slate-400 font-mono mt-0.5">
-                              {currentTrack.filename}
-                            </p>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                              {isPlayingAudio ? "NOW PLAYING" : "READY TO PLAY"}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                              {currentTrack.category}
+                            </span>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 self-start md:self-center">
-                          <span className="text-[11px] font-bold text-slate-400 mr-1">Speed:</span>
-                          {[0.8, 1.0, 1.2].map(rate => (
-                            <button
-                              key={rate}
-                              onClick={() => changePlaybackRate(rate)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                                audioPlaybackRate === rate
-                                  ? 'bg-cyan-500 text-slate-950 font-black shadow'
-                                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                              }`}
-                            >
-                              {rate}x
-                            </button>
-                          ))}
-
-                          <a
-                            href={currentTrack.downloadUrl}
-                            download={currentTrack.filename}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.title || currentTrack.filename })}
-                            className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition shadow-sm"
-                            title="Download Track"
-                          >
-                            <span>⬇ Download</span>
-                          </a>
+                          <h3 className="text-xl font-extrabold font-cinzel text-white leading-tight">
+                            {currentTrack.title}
+                          </h3>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">
+                            {currentTrack.filename}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Scrubber & Audio Tag */}
-                      <div className="mt-5 space-y-2">
-                        <audio
-                          ref={audioRef}
-                          src={currentTrack.streamUrl}
-                          preload="metadata"
-                          onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
-                          onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
-                          onEnded={() => {
-                            if (activeTrackIndex < filteredTracks.length - 1) {
-                              playTrack(activeTrackIndex + 1);
-                            } else {
-                              setIsPlayingAudio(false);
-                            }
-                          }}
-                          className="w-full hidden"
-                        />
+                      <div className="flex items-center gap-2 self-start md:self-center">
+                        <span className="text-[11px] font-bold text-slate-400 mr-1">Speed:</span>
+                        {[0.8, 1.0, 1.2].map(rate => (
+                          <button
+                            key={rate}
+                            onClick={() => changePlaybackRate(rate)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                              audioPlaybackRate === rate
+                                ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
 
-                        <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-                          <span>{formatAudioTime(audioCurrentTime)}</span>
-                          <input
-                            type="range"
-                            min="0"
-                            max={audioDuration || 100}
-                            value={audioCurrentTime}
-                            onChange={(e) => {
-                              const t = Number(e.target.value);
-                              setAudioCurrentTime(t);
-                              if (audioRef.current) audioRef.current.currentTime = t;
-                            }}
-                            className="flex-1 accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                          />
-                          <span>{formatAudioTime(audioDuration)}</span>
-                        </div>
+                        <a
+                          href={currentTrack.downloadUrl}
+                          download={currentTrack.filename}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => trackAnalyticsEvent('download_track_click', { track_name: currentTrack.title })}
+                          className="ml-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 p-2.5 rounded-xl border border-cyan-900 text-xs flex items-center gap-1 transition shadow-sm font-bold"
+                          title="Download Track"
+                        >
+                          <span>⬇ Download</span>
+                        </a>
                       </div>
                     </div>
-                  )}
+
+                    {/* Active Audio Node */}
+                    <div className="mt-5 space-y-3">
+                      <audio
+                        ref={audioRef}
+                        src={currentTrack.streamUrl}
+                        preload="auto"
+                        onPlay={() => setIsPlayingAudio(true)}
+                        onPause={() => setIsPlayingAudio(false)}
+                        onTimeUpdate={(e) => setAudioCurrentTime(e.target.currentTime)}
+                        onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
+                        onEnded={() => setIsPlayingAudio(false)}
+                        className="w-full h-10 mt-2 block rounded-lg accent-cyan-400"
+                        controls
+                      />
+
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
+                        <span>Current: {formatAudioTime(audioCurrentTime)}</span>
+                        <span>Total: {formatAudioTime(audioDuration)}</span>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Track List */}
                   <div className="glass-card p-5 rounded-3xl border border-cyan-500/20">
                     <div className="flex items-center justify-between pb-3 border-b border-cyan-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                      <span>Tracks Available ({filteredTracks.length})</span>
+                      <span>Available Tracks ({musicTracks.length})</span>
                       <span>Action</span>
                     </div>
 
-                    {filteredTracks.length > 0 ? (
-                      <div className="divide-y divide-slate-800/60">
-                        {filteredTracks.map((track, idx) => {
-                          const isActive = track.id === (currentTrack && currentTrack.id);
-                          const displayName = track.title || track.filename;
+                    <div className="divide-y divide-slate-800/60">
+                      {musicTracks.map((track, idx) => {
+                        const isActive = idx === activeTrackIndex;
 
-                          return (
-                            <div
-                              key={track.id || idx}
-                              onClick={() => playTrack(musicTracks.indexOf(track))}
-                              className={`py-3.5 px-3 rounded-2xl transition flex items-center justify-between gap-4 cursor-pointer group ${
-                                isActive ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-900/60'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition ${
-                                  isActive 
-                                    ? 'bg-cyan-500 text-slate-950 font-black' 
-                                    : 'bg-slate-900 border border-slate-800 text-cyan-400 group-hover:border-cyan-500'
-                                }`}>
-                                  {isActive && isPlayingAudio ? '▶' : `${idx + 1}`}
-                                </div>
+                        return (
+                          <div
+                            key={track.id || idx}
+                            onClick={() => handlePlayTrack(idx)}
+                            className={`py-3.5 px-3 rounded-2xl transition flex items-center justify-between gap-4 cursor-pointer group ${
+                              isActive ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-900/60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition ${
+                                isActive 
+                                  ? 'bg-cyan-500 text-slate-950 font-black' 
+                                  : 'bg-slate-900 border border-slate-800 text-cyan-400 group-hover:border-cyan-500'
+                              }`}>
+                                {isActive && isPlayingAudio ? '▶' : `${idx + 1}`}
+                              </div>
 
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
-                                      isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
-                                    }`}>
-                                      {displayName}
-                                    </h4>
-                                    {track.category && (
-                                      <span className="text-[9px] uppercase font-bold text-cyan-400/80 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60">
-                                        {track.category}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    {track.filename}
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
+                                    isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
+                                  }`}>
+                                    {track.title}
+                                  </h4>
+                                  <span className="text-[9px] uppercase font-bold text-cyan-400/80 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60">
+                                    {track.category}
                                   </span>
                                 </div>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    playTrack(musicTracks.indexOf(track));
-                                  }}
-                                  className="text-xs bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1"
-                                >
-                                  <span>{isActive && isPlayingAudio ? 'Playing' : 'Play'}</span>
-                                </button>
-                                
-                                <a
-                                  href={track.downloadUrl}
-                                  download={track.filename}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    trackAnalyticsEvent('download_track_click', { track_name: displayName });
-                                  }}
-                                  className="text-xs text-slate-400 hover:text-white p-1.5"
-                                  title="Download"
-                                >
-                                  ⬇
-                                </a>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {track.filename}
+                                </span>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="py-12 text-center text-slate-400">
-                        <div className="text-3xl mb-2">🎵</div>
-                        <p className="font-cinzel text-white text-base">No tracks found in repository.</p>
-                      </div>
-                    )}
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePlayTrack(idx);
+                                }}
+                                className="text-xs bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1"
+                              >
+                                <span>{isActive && isPlayingAudio ? 'Playing' : 'Play Track'}</span>
+                              </button>
+                              
+                              <a
+                                href={track.downloadUrl}
+                                download={track.filename}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  trackAnalyticsEvent('download_track_click', { track_name: track.title });
+                                }}
+                                className="text-xs text-slate-400 hover:text-white p-1.5"
+                                title="Download"
+                              >
+                                ⬇
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
