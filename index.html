@@ -14,7 +14,7 @@
     gtag('config', 'G-1D8TXY3JM5');
   </script>
 
-  <!-- Google Translate Engine (Loaded Safely) -->
+  <!-- Google Translate Engine -->
   <script type="text/javascript">
     function googleTranslateElementInit() {
       new google.translate.TranslateElement({
@@ -93,7 +93,7 @@
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-    /* Hide Google Translate's intrusive top toolbar while keeping engine active */
+    /* Hide default Google Translate top frame */
     .goog-te-banner-frame.skiptranslate, 
     .goog-te-banner-frame, 
     iframe.goog-te-banner-frame,
@@ -118,10 +118,7 @@
   </style>
 </head>
 <body class="selection:bg-cyan-500 selection:text-white pb-20">
-  <!-- Invisible container where Google Translate attaches its DOM dropdown -->
   <div id="google_translate_element"></div>
-
-  <!-- React Mount Point -->
   <div id="root"></div>
 
   <script type="text/babel">
@@ -393,7 +390,6 @@
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
       calendar: { label: 'Master Schedule', icon: '🗓️', path: 'calendar' }
     };
-
     function ProductionApp() {
       const getInitialTab = () => {
         const hash = window.location.hash.replace('#', '').toLowerCase();
@@ -464,9 +460,34 @@
       });
 
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
-      const [selectedMusicCategory, setSelectedMusicCategory] = useState('ALL');
       const [isLoadingMusic, setIsLoadingMusic] = useState(false);
-      const [musicTabSubView, setMusicTabSubView] = useState('drive');
+
+      // Adaptive Multi-Folder Categorization
+      const folderCategories = useMemo(() => {
+        const map = {};
+        musicTracks.forEach(track => {
+          const cat = track.category || 'General';
+          if (!map[cat]) map[cat] = [];
+          map[cat].push(track);
+        });
+        return map;
+      }, [musicTracks]);
+
+      const folderNames = useMemo(() => Object.keys(folderCategories), [folderCategories]);
+
+      const [musicTabSubView, setMusicTabSubView] = useState(() => {
+        return folderNames[0] || 'Practice Tracks';
+      });
+
+      useEffect(() => {
+        if (musicTabSubView !== 'youtube' && folderNames.length > 0 && !folderNames.includes(musicTabSubView)) {
+          setMusicTabSubView(folderNames[0]);
+        }
+      }, [folderNames, musicTabSubView]);
+
+      const currentFolderTracks = useMemo(() => {
+        return folderCategories[musicTabSubView] || [];
+      }, [folderCategories, musicTabSubView]);
 
       const [isEditingCall, setIsEditingCall] = useState(false);
       const [editCallData, setEditCallData] = useState({
@@ -483,22 +504,18 @@
       });
       const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
 
-      // Programmatic Translate Trigger: Instructs Google's Engine to Translate
       const triggerLanguageTranslation = (langCode) => {
         setCurrentLanguage(langCode);
         document.documentElement.dir = (langCode === 'ar') ? 'rtl' : 'ltr';
 
-        // Set Google Translate cookie so the translation persists across pages
         document.cookie = `googtrans=/en/${langCode}; path=/;`;
         document.cookie = `googtrans=/en/${langCode}; domain=${window.location.hostname}; path=/;`;
 
-        // Direct select element trigger
         const selectElement = document.querySelector('.goog-te-combo');
         if (selectElement) {
           selectElement.value = langCode;
           selectElement.dispatchEvent(new Event('change'));
         } else {
-          // If the select isn't ready in the DOM yet, reload with the cookie set
           window.location.reload();
         }
 
@@ -674,16 +691,6 @@
       useEffect(() => {
         localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
       }, [callTypes]);
-
-      const availableMusicCategories = useMemo(() => {
-        const cats = Array.from(new Set(musicTracks.map(t => t.category).filter(Boolean)));
-        return ['ALL', ...cats];
-      }, [musicTracks]);
-
-      const filteredTracks = useMemo(() => {
-        if (selectedMusicCategory === 'ALL') return musicTracks;
-        return musicTracks.filter(t => t.category === selectedMusicCategory);
-      }, [musicTracks, selectedMusicCategory]);
 
       const currentTrack = musicTracks[activeTrackIndex] || PRODUCTION_AUDIO_TRACKS[0];
 
@@ -1226,7 +1233,7 @@
                           <button
                             onClick={() => deleteCall(reh.id)}
                             className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1">
-                            🗑️️ Delete
+                            🗑️ Delete
                           </button>
                         </div>
                       )}
@@ -1446,7 +1453,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (DYNAMIC MULTI-FOLDER) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -1484,22 +1491,39 @@
                 </div>
               </div>
 
-              {/* Source Switcher */}
-              <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-2xl border border-cyan-900/80 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setMusicTabSubView('drive')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                    musicTabSubView === 'drive'
-                      ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span>🎧 Rehearsal Audio Player</span>
-                  <span className="text-[10px] bg-cyan-950 px-1.5 py-0.5 rounded-full border border-cyan-700">
-                    {musicTracks.length}
-                  </span>
-                </button>
+              {/* Dynamic Multi-Folder Switcher */}
+              <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-2xl border border-cyan-900/80 w-fit">
+                {folderNames.map(folder => {
+                  const count = folderCategories[folder]?.length || 0;
+                  const isSelected = musicTabSubView === folder;
+                  return (
+                    <button
+                      key={folder}
+                      type="button"
+                      onClick={() => {
+                        setMusicTabSubView(folder);
+                        const firstInFolder = folderCategories[folder]?.[0];
+                        if (firstInFolder) {
+                          setActiveTrackIndex(musicTracks.indexOf(firstInFolder));
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>🎧 {folder}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                        isSelected 
+                          ? 'bg-cyan-950/80 border-cyan-400/50 text-cyan-200' 
+                          : 'bg-slate-900 border-slate-700 text-slate-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
 
                 <button
                   type="button"
@@ -1517,28 +1541,9 @@
                 </button>
               </div>
 
-              {musicTabSubView === 'drive' && (
+              {musicTabSubView !== 'youtube' && (
                 <div className="space-y-4">
-                  {/* Category Filter */}
-                  {availableMusicCategories.length > 2 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {availableMusicCategories.map(cat => (
-                        <button
-                          key={cat}
-                          onClick={() => setSelectedMusicCategory(cat)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${
-                            selectedMusicCategory === cat
-                              ? 'bg-cyan-600 text-white shadow-md'
-                              : 'bg-slate-950/80 text-slate-300 hover:text-white border border-slate-800'
-                          }`}
-                        >
-                          {cat === 'ALL' ? 'All Collections' : cat}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Active Native Streaming Player Card (Height = 180) */}
+                  {/* Active Player Card */}
                   <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5 mb-5">
                       <div>
@@ -1568,7 +1573,7 @@
                       </a>
                     </div>
 
-                    {/* Google Drive Media Engine Container (Height 180) */}
+                    {/* Google Drive Player Container (Height = 180) */}
                     <div className="w-full bg-slate-950/95 rounded-2xl p-2.5 border border-cyan-500/40 overflow-hidden shadow-2xl">
                       <iframe
                         src={currentTrack.previewUrl}
@@ -1581,21 +1586,22 @@
                     </div>
                   </div>
 
-                  {/* Track Selection Table */}
+                  {/* Scoped Track List */}
                   <div className="glass-card p-5 rounded-3xl border border-cyan-500/20">
                     <div className="flex items-center justify-between pb-3 border-b border-cyan-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                      <span>Available Tracks ({filteredTracks.length})</span>
+                      <span>{musicTabSubView} Tracks ({currentFolderTracks.length})</span>
                       <span>Action</span>
                     </div>
 
                     <div className="divide-y divide-slate-800/60">
-                      {filteredTracks.map((track, idx) => {
-                        const isActive = idx === activeTrackIndex;
+                      {currentFolderTracks.map((track, idx) => {
+                        const globalIdx = musicTracks.indexOf(track);
+                        const isActive = globalIdx === activeTrackIndex;
 
                         return (
                           <div
                             key={track.id || idx}
-                            onClick={() => selectTrack(musicTracks.indexOf(track))}
+                            onClick={() => selectTrack(globalIdx)}
                             className={`py-3.5 px-3 rounded-2xl transition flex items-center justify-between gap-4 cursor-pointer group ${
                               isActive ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-900/60'
                             }`}
@@ -1610,16 +1616,11 @@
                               </div>
 
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
-                                    isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
-                                  }`}>
-                                    {track.title}
-                                  </h4>
-                                  <span className="text-[9px] uppercase font-bold text-cyan-400/80 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60">
-                                    {track.category}
-                                  </span>
-                                </div>
+                                <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
+                                  isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
+                                }`}>
+                                  {track.title}
+                                </h4>
                                 <span className="text-[10px] text-slate-400 font-mono">
                                   {track.filename}
                                 </span>
@@ -1631,7 +1632,7 @@
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  selectTrack(musicTracks.indexOf(track));
+                                  selectTrack(globalIdx);
                                 }}
                                 className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 ${
                                   isActive
@@ -1671,9 +1672,6 @@
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
                     ></iframe>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-400 px-2">
-                    <span>🎵 Click the playlist icon in the top-right corner to jump to specific songs.</span>
                   </div>
                 </div>
               )}
