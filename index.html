@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,6 +13,18 @@
     gtag('js', new Date());
     gtag('config', 'G-1D8TXY3JM5');
   </script>
+
+  <!-- Google Translate Engine (Loaded Safely) -->
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'en,es,pt,ar',
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+  </script>
+  <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -54,6 +65,7 @@
       background: radial-gradient(circle at 50% 0%, #0c4a6e 0%, #031828 100%);
       color: #f1f5f9;
       min-height: 100vh;
+      top: 0px !important;
     }
     .font-cinzel { font-family: 'Cinzel', serif; }
     .glass-card {
@@ -80,9 +92,36 @@
     ::-webkit-scrollbar-track { background: #082f49; }
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+
+    /* Hide Google Translate's intrusive top toolbar while keeping engine active */
+    .goog-te-banner-frame.skiptranslate, 
+    .goog-te-banner-frame, 
+    iframe.goog-te-banner-frame,
+    .goog-te-balloon-frame {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+    }
+    body {
+      top: 0px !important;
+      position: static !important;
+    }
+    .skiptranslate iframe {
+      display: none !important;
+    }
+    #google_translate_element {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      visibility: hidden;
+    }
   </style>
 </head>
 <body class="selection:bg-cyan-500 selection:text-white pb-20">
+  <!-- Invisible container where Google Translate attaches its DOM dropdown -->
+  <div id="google_translate_element"></div>
+
+  <!-- React Mount Point -->
   <div id="root"></div>
 
   <script type="text/babel">
@@ -363,6 +402,7 @@
 
       const [activeTab, setActiveTab] = useState(getInitialTab);
       const [copiedBreadcrumb, setCopiedBreadcrumb] = useState(false);
+      const [currentLanguage, setCurrentLanguage] = useState('en');
 
       const [adminSessionToken, setAdminSessionToken] = useState(() => sessionStorage.getItem('frozen_admin_token') || '');
       const isAdmin = Boolean(adminSessionToken);
@@ -443,17 +483,26 @@
       });
       const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
 
-      const setSiteLanguage = (langCode) => {
-        if (langCode === 'en') {
-          document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-          document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=' + window.location.hostname + '; path=/;';
-          document.documentElement.dir = 'ltr';
+      // Programmatic Translate Trigger: Instructs Google's Engine to Translate
+      const triggerLanguageTranslation = (langCode) => {
+        setCurrentLanguage(langCode);
+        document.documentElement.dir = (langCode === 'ar') ? 'rtl' : 'ltr';
+
+        // Set Google Translate cookie so the translation persists across pages
+        document.cookie = `googtrans=/en/${langCode}; path=/;`;
+        document.cookie = `googtrans=/en/${langCode}; domain=${window.location.hostname}; path=/;`;
+
+        // Direct select element trigger
+        const selectElement = document.querySelector('.goog-te-combo');
+        if (selectElement) {
+          selectElement.value = langCode;
+          selectElement.dispatchEvent(new Event('change'));
         } else {
-          document.cookie = `googtrans=/en/${langCode}; path=/;`;
-          document.cookie = `googtrans=/en/${langCode}; domain=${window.location.hostname}; path=/;`;
-          document.documentElement.dir = (langCode === 'ar') ? 'rtl' : 'ltr';
+          // If the select isn't ready in the DOM yet, reload with the cookie set
+          window.location.reload();
         }
-        window.location.reload();
+
+        trackAnalyticsEvent('change_site_language', { language: langCode });
       };
 
       const navigateToTab = (tabId) => {
@@ -933,33 +982,41 @@
 
             {/* Language Controls + Staff Login */}
             <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3 shrink-0">
-              <div className="flex items-center gap-1 bg-slate-950/80 border border-cyan-800/80 p-1 rounded-xl text-xs">
+              <div className="flex items-center gap-1 bg-slate-950/90 border border-cyan-700/80 p-1 rounded-xl text-xs shadow-md">
                 <span className="text-slate-400 px-1 text-[11px]">🌐</span>
                 <button
                   type="button"
-                  onClick={() => setSiteLanguage('en')}
-                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  onClick={() => triggerLanguageTranslation('en')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                    currentLanguage === 'en' ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
                 >
                   EN
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSiteLanguage('es')}
-                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  onClick={() => triggerLanguageTranslation('es')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                    currentLanguage === 'es' ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
                 >
                   ES
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSiteLanguage('pt')}
-                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  onClick={() => triggerLanguageTranslation('pt')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                    currentLanguage === 'pt' ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
                 >
                   PT
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSiteLanguage('ar')}
-                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  onClick={() => triggerLanguageTranslation('ar')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                    currentLanguage === 'ar' ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
                 >
                   العربية
                 </button>
@@ -1169,7 +1226,7 @@
                           <button
                             onClick={() => deleteCall(reh.id)}
                             className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1">
-                            🗑️ Delete
+                            🗑️️ Delete
                           </button>
                         </div>
                       )}
