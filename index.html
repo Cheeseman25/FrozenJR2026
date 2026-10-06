@@ -93,7 +93,6 @@
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-    /* Hide default Google Translate top frame */
     .goog-te-banner-frame.skiptranslate, 
     .goog-te-banner-frame, 
     iframe.goog-te-banner-frame,
@@ -390,6 +389,7 @@
       videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },
       calendar: { label: 'Master Schedule', icon: '🗓️', path: 'calendar' }
     };
+
     function ProductionApp() {
       const getInitialTab = () => {
         const hash = window.location.hash.replace('#', '').toLowerCase();
@@ -462,7 +462,6 @@
       const [activeTrackIndex, setActiveTrackIndex] = useState(0);
       const [isLoadingMusic, setIsLoadingMusic] = useState(false);
 
-      // Adaptive Multi-Folder Categorization
       const folderCategories = useMemo(() => {
         const map = {};
         musicTracks.forEach(track => {
@@ -503,6 +502,9 @@
         notes: ''
       });
       const [isCustomTypeMode, setIsCustomTypeMode] = useState(false);
+
+      // Search query state for the rehearsal notice performer selection box
+      const [callModalPerformerFilter, setCallModalPerformerFilter] = useState('');
 
       const triggerLanguageTranslation = (langCode) => {
         setCurrentLanguage(langCode);
@@ -749,6 +751,7 @@
           notes: ''
         });
         setIsCustomTypeMode(false);
+        setCallModalPerformerFilter('');
         setIsEditingCall(true);
       };
 
@@ -760,6 +763,7 @@
           focusScenes: Array.isArray(reh.focusScenes) ? reh.focusScenes.join(', ') : (reh.focusScenes || '')
         });
         setIsCustomTypeMode(!callTypes.includes(reh.type));
+        setCallModalPerformerFilter('');
         setIsEditingCall(true);
       };
 
@@ -793,6 +797,17 @@
       const clearAllRoles = () => {
         setEditCallData({ ...editCallData, calledRoles: [] });
       };
+
+      // Filtered performers inside the modal based on typing
+      const modalFilteredActors = useMemo(() => {
+        const q = callModalPerformerFilter.toLowerCase().trim();
+        if (!q) return actorList;
+        return actorList.filter(item => 
+          item.actorName.toLowerCase().includes(q) || 
+          item.role.toLowerCase().includes(q) ||
+          (item.category && item.category.toLowerCase().includes(q))
+        );
+      }, [actorList, callModalPerformerFilter]);
 
       const openCelebration = (item) => {
         const isFirstReveal = !revealedCardIds.includes(item.id);
@@ -1233,7 +1248,7 @@
                           <button
                             onClick={() => deleteCall(reh.id)}
                             className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1">
-                            🗑️ Delete
+                            🗑 Delete
                           </button>
                         </div>
                       )}
@@ -2256,6 +2271,7 @@
                     </div>
                   </div>
 
+                  {/* PERFORMER SELECTION BOX WITH SEARCH FILTER */}
                   <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                       <div>
@@ -2295,8 +2311,29 @@
                       </div>
                     </div>
 
+                    {/* Quick Search Input */}
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        placeholder="Search cast by performer or character name..."
+                        value={callModalPerformerFilter}
+                        onChange={(e) => setCallModalPerformerFilter(e.target.value)}
+                        className="w-full bg-slate-900/90 border border-slate-700 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+                      />
+                      {callModalPerformerFilter && (
+                        <button 
+                          type="button"
+                          onClick={() => setCallModalPerformerFilter('')}
+                          className="absolute right-3 top-2 text-[10px] text-slate-400 hover:text-white"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtered Performer List */}
                     <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                      {actorList.map((item) => {
+                      {modalFilteredActors.map((item) => {
                         const performerTag = `${item.actorName} (${item.role})`;
                         const isSelected = editCallData.calledRoles.includes(performerTag);
 
@@ -2321,6 +2358,23 @@
                           </div>
                         );
                       })}
+
+                      {modalFilteredActors.length === 0 && (
+                        <div className="p-3 text-center text-slate-400 italic text-xs">
+                          No performers match "{callModalPerformerFilter}"
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 text-xs flex items-center justify-between">
+                      <span className="text-slate-400">
+                        Currently Called: <strong className="text-cyan-200">{editCallData.calledRoles.length}</strong> selected
+                      </span>
+                      {callModalPerformerFilter && (
+                        <span className="text-[11px] text-slate-500">
+                          Showing {modalFilteredActors.length} of {actorList.length}
+                        </span>
+                      )}
                     </div>
                   </div>
 
