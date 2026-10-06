@@ -11,22 +11,8 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-
     gtag('config', 'G-1D8TXY3JM5');
   </script>
-
-  <!-- Google Translate Element Initialization -->
-  <script type="text/javascript">
-    function googleTranslateElementInit() {
-      new google.translate.TranslateElement({
-        pageLanguage: 'en',
-        includedLanguages: 'en,es,pt,ar',
-        layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
-        autoDisplay: false
-      }, 'google_translate_element');
-    }
-  </script>
-  <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -95,7 +81,7 @@
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-    /* Hide Google Translate top banner while preserving widget */
+    /* Hide default Google Translate top bar frame */
     .goog-te-banner-frame.skiptranslate, .goog-te-banner-frame {
       display: none !important;
     }
@@ -103,27 +89,19 @@
       top: 0px !important;
     }
     .goog-te-gadget-simple {
-      background-color: rgba(15, 23, 42, 0.9) !important;
+      background-color: rgba(15, 23, 42, 0.85) !important;
       border: 1px solid rgba(56, 189, 248, 0.3) !important;
-      padding: 6px 10px !important;
+      padding: 5px 8px !important;
       border-radius: 12px !important;
-      font-size: 12px !important;
+      font-size: 11px !important;
       font-weight: 700 !important;
       color: #bae6fd !important;
       display: inline-flex !important;
       align-items: center !important;
-      gap: 6px !important;
-      transition: all 0.2s ease !important;
-    }
-    .goog-te-gadget-simple:hover {
-      border-color: rgba(56, 189, 248, 0.7) !important;
-      background-color: rgba(30, 41, 59, 0.95) !important;
+      gap: 4px !important;
     }
     .goog-te-gadget-simple .goog-te-menu-value span {
       color: #e0f2fe !important;
-    }
-    .goog-te-gadget-icon {
-      margin-right: 4px !important;
     }
   </style>
 </head>
@@ -138,4 +116,38 @@
     const FROZEN_HERO_IMAGE_URL = "https://www.mtishows.com/sites/default/files/styles/hero_responsive_wide/public/show/hero/000523_hero_0.jpg?itok=9msnKhTB";
 
     const CALLBOARD_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyof6K9TWBjXsSBevpx6hmk3VZ1971ob7jmng1Bo3piJiRQLujKPx7wLyyhqep8R_wn/exec";
-    const DIRECT_CAST_CSV_URL = "
+    const DIRECT_CAST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRruIC2zvcxRfRrtKsgZmHoVOEsiJVEsY7wqRcZzpEkXlMA6_ASTsidzCGrdkp0_7Dt5247cCYCcXSJ/pub?gid=1788082919&single=true&output=csv";
+    const GOOGLE_DRIVE_MUSIC_FOLDER_URL = "https://drive.google.com/drive/folders/1WpVSq_wCG0RhjirsZFZjqOR3w50j4RPe?usp=sharing";
+
+    const PRODUCTION_AUDIO_TRACKS = [
+      {
+        id: "1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp",
+        title: "Let the Sun Shine On",
+        filename: "Let the Sun Shine On.mp3",
+        category: "Practice Tracks",
+        previewUrl: "https://drive.google.com/file/d/1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp/preview",
+        downloadUrl: "https://drive.google.com/uc?export=download&id=1kq-gfuJTOWOf5eCVCbtTUst2gzODpZvp"
+      }
+    ];
+
+    function trackAnalyticsEvent(eventName, params = {}) {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', eventName, params);
+      }
+    }
+
+    function formatCallBoardDate(rawVal) {
+      if (!rawVal) return '';
+      if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
+        return rawVal.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+      const str = String(rawVal).trim();
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (ymd) {
+        const dt = new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
+        if (!isNaN(dt.getTime()))
