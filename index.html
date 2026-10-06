@@ -53,7 +53,6 @@
       background: radial-gradient(circle at 50% 0%, #0c4a6e 0%, #031828 100%);
       color: #f1f5f9;
       min-height: 100vh;
-      top: 0px !important;
     }
     .font-cinzel { font-family: 'Cinzel', serif; }
     .glass-card {
@@ -80,29 +79,6 @@
     ::-webkit-scrollbar-track { background: #082f49; }
     ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
-
-    /* Hide default Google Translate top bar frame */
-    .goog-te-banner-frame.skiptranslate, .goog-te-banner-frame {
-      display: none !important;
-    }
-    body {
-      top: 0px !important;
-    }
-    .goog-te-gadget-simple {
-      background-color: rgba(15, 23, 42, 0.85) !important;
-      border: 1px solid rgba(56, 189, 248, 0.3) !important;
-      padding: 5px 8px !important;
-      border-radius: 12px !important;
-      font-size: 11px !important;
-      font-weight: 700 !important;
-      color: #bae6fd !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: 4px !important;
-    }
-    .goog-te-gadget-simple .goog-te-menu-value span {
-      color: #e0f2fe !important;
-    }
   </style>
 </head>
 <body class="selection:bg-cyan-500 selection:text-white pb-20">
@@ -150,4 +126,106 @@
       const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (ymd) {
         const dt = new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
-        if (!isNaN(dt.getTime()))
+        if (!isNaN(dt.getTime())) {
+          return dt.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+        }
+      }
+      const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mdy) {
+        const dt = new Date(parseInt(mdy[3], 10), parseInt(mdy[1], 10) - 1, parseInt(mdy[2], 10));
+        if (!isNaN(dt.getTime())) {
+          return dt.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+        }
+      }
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+      return str;
+    }
+
+    function parseDateTimestamp(val) {
+      if (!val) return 0;
+      if (val instanceof Date) return val.getTime();
+      const str = String(val).trim();
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (ymd) {
+        return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10)).getTime();
+      }
+      const mdy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mdy) {
+        return new Date(parseInt(mdy[3], 10), parseInt(mdy[1], 10) - 1, parseInt(mdy[2], 10)).getTime();
+      }
+      const t = new Date(str).getTime();
+      return isNaN(t) ? 0 : t;
+    }
+
+    function playAudibleFanfare() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const notes = [
+          { freqs: [466.16], delay: 0.00, dur: 0.12 },
+          { freqs: [466.16], delay: 0.14, dur: 0.12 },
+          { freqs: [466.16], delay: 0.28, dur: 0.12 },
+          { freqs: [587.33, 700], delay: 0.44, dur: 0.35 },
+          { freqs: [700], delay: 0.82, dur: 0.18 },
+          { freqs: [466.16, 587.33, 932.33], delay: 1.05, dur: 1.3 }
+        ];
+
+        const now = ctx.currentTime;
+        notes.forEach(note => {
+          note.freqs.forEach(freq => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, now + note.delay);
+            gain.gain.setValueAtTime(0.0001, now + note.delay);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + note.delay + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + note.delay + note.dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + note.delay);
+            osc.stop(now + note.delay + note.dur + 0.05);
+          });
+        });
+      } catch (err) {}
+    }
+
+    function launchFanfareCelebration() {
+      playAudibleFanfare();
+      if (typeof confetti === 'function') {
+        const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
+        confetti({ particleCount: 65, angle: 60, spread: 70, origin: { x: 0.1, y: 0.7 }, colors });
+        confetti({ particleCount: 65, angle: 120, spread: 70, origin: { x: 0.9, y: 0.7 }, colors });
+        setTimeout(() => {
+          confetti({ particleCount: 95, spread: 100, origin: { y: 0.55 }, colors });
+        }, 250);
+      }
+    }
+
+    function renderWithLinks(text) {
+      if (!text || typeof text !== 'string') return text;
+      const urlRegex = /(https?:\/\/[^\s]+|meet\.google\.com\/[a-zA-Z0-9_-]+)/g;
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (part && (part.match(/^https?:\/\//) || part.match(/^meet\.google\.com/))) {
+          const
