@@ -4,8 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Frozen JR. Production Portal & Call Board</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>" />
   
+  <!-- Snowflake Favicon (Inline SVG Data URI) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>" />
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-1D8TXY3JM5"></script>
   <script>
@@ -166,6 +168,12 @@
       if (typeof window.gtag === 'function') {
         window.gtag('event', eventName, params);
       }
+    }
+
+    function naturalTrackSorter(a, b) {
+      const nameA = a.filename || a.title || '';
+      const nameB = b.filename || b.title || '';
+      return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
     }
 
     function formatCallBoardDate(rawVal) {
@@ -474,7 +482,7 @@
           if (saved) {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].previewUrl) {
-              return parsed;
+              return parsed.sort(naturalTrackSorter);
             }
           }
         } catch(e) {}
@@ -490,6 +498,9 @@
           const cat = track.category || 'General';
           if (!map[cat]) map[cat] = [];
           map[cat].push(track);
+        });
+        Object.keys(map).forEach(key => {
+          map[key].sort(naturalTrackSorter);
         });
         return map;
       }, [musicTracks]);
@@ -761,6 +772,7 @@
 
           const clean = list.filter(t => t && t.previewUrl && !t.calledRoles);
           if (clean.length > 0) {
+            clean.sort(naturalTrackSorter);
             setMusicTracks(clean);
             localStorage.setItem('frozen_music_tracks', JSON.stringify(clean));
           }
@@ -1632,7 +1644,7 @@
             </div>
           )}
 
-          {/* TAB 4: REHEARSAL AUDIO TRACKS (DYNAMIC MULTI-FOLDER) */}
+          {/* TAB 4: REHEARSAL AUDIO TRACKS (DYNAMIC MULTI-FOLDER & SORTED) */}
           {activeTab === 'music' && (
             <div className="space-y-6">
               <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
@@ -2598,7 +2610,7 @@
             </div>
           )}
 
-        {/* Footer with TTS Players Branding and Logo */}
+          {/* Footer with TTS Players Branding and Logo */}
           <footer className="mt-12 text-center text-xs text-slate-400 border-t border-slate-800/80 pt-8 pb-4 flex flex-col items-center justify-center space-y-4">
             <div className="relative group">
               <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-cyan-500/25 to-sky-500/25 opacity-50 blur-md group-hover:opacity-100 transition duration-300"></div>
