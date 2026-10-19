@@ -3,3 +3,5 @@
 apps-script/
 AppScript for Frozen.txt
 .DS_Store
+node_modules/
+dist/

@@ -1,0 +1,12 @@
+{
+  "name": "frozenjr2026",
+  "private": true,
+  "description": "Frozen JR. production portal and call board (TTS Players)",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tailwindcss": "3.4.17"
+  }
+}
