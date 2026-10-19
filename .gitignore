@@ -1,0 +1,5 @@
+# Apps Script backend: kept locally for reference only (contains the admin PIN).
+# The live copy is edited and deployed at script.google.com.
+apps-script/
+AppScript for Frozen.txt
+.DS_Store
