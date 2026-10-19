@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frozen JR. Production Portal & Call Board</title>
+  
+  <!-- Snowflake Favicon (Inline SVG Data URI) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❄️</text></svg>" />
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-1D8TXY3JM5"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-1D8TXY3JM5');
+  </script>
+
+  <!-- Google Translate Engine -->
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        includedLanguages: 'en,es,pt,ar',
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+  </script>
+  <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
+  
+
+  <!-- React 18 (UMD build; the app bundle uses the global React/ReactDOM) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- Canvas Confetti for Fanfare Effect -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&amp;family=Nunito:wght@400;600;700;800&amp;family=Montserrat:wght@800;900&amp;display=swap" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+// Same Tailwind config, for the no-build dev preview (scripts/dev-preview).
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        frozen: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          800: '#075985',
+          900: '#0c4a6e',
+          950: '#082f49',
+        }
+      }
+    }
+  }
+}
+
+  </script>
+  <style>
+/* Tailwind layers + the custom site styles that used to live in index.html <style>. */
+
+
+
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: radial-gradient(circle at 50% 0%, #0c4a6e 0%, #031828 100%);
+  color: #f1f5f9;
+  min-height: 100vh;
+  top: 0px !important;
+  overflow-x: hidden;
+}
+.font-cinzel { font-family: 'Cinzel', serif; }
+
+#snow-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 10;
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+.glass-card-active {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
+}
+.celebration-border {
+  background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #38bdf8);
+  background-size: 300% 300%;
+  animation: gradientShift 6s ease infinite;
+}
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #082f49; }
+::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+
+.goog-te-banner-frame.skiptranslate, 
+.goog-te-banner-frame, 
+iframe.goog-te-banner-frame,
+.goog-te-balloon-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+body {
+  top: 0px !important;
+  position: static !important;
+}
+.skiptranslate iframe {
+  display: none !important;
+}
+#google_translate_element {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  visibility: hidden;
+}
+  </style>
+</head>
+<body class="selection:bg-cyan-500 selection:text-white pb-20">
+  <canvas id="snow-canvas"></canvas>
+  <div id="google_translate_element"></div>
+  <div id="root"></div>
+
+  <script src="assets/app-7ca468e5a4.js"></script>
+</body>
+</html>
