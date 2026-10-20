@@ -30,5 +30,5 @@ export const TAB_INFO = Object.fromEntries(
 );
 export const DEFAULT_TAB = Object.keys(TAB_INFO)[0];
 
-// Browser-storage key for this show, e.g. storageKey('rehearsals') -> "frozen_rehearsals".
+// Browser-storage key for this show, e.g. storageKey("rehearsals") -> "<storagePrefix>_rehearsals".
 export const storageKey = (name) => `${SHOW.storagePrefix}_${name}`;

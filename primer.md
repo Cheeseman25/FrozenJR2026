@@ -1,7 +1,8 @@
 # FrozenJR2026 — Project Primer
 
 > Read this first at the start of any session on this project. It is the working context for Claude.
-> Last updated: 2026-10-19. Restructured from one index.html into src/ modules with a build step (branch `restructure-build`).
+> Last updated: 2026-10-20. Restructured into a shared engine (`src/`) + show settings (`show/show.config.js`) with a build step (branch `restructure-build`).
+> The engine also lives in the template repo `Cheeseman25/ShowPortalTemplate`; future shows are created from it. Engine fixes go there too.
 
 ## What this is
 
@@ -36,16 +37,18 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 
 | File | Purpose |
 |---|---|
-| `src/index.html` | HTML shell (head, analytics, translate, fonts, `#root`). Build markers `<!--STYLES-->`, `<!--APP-->`. |
+| `show/show.config.js` | **All Frozen-specific settings**: names/text, artwork/logo, Google IDs, analytics, languages, call types, cast column keywords (summer/snow, winter/ice), pages, snow background, theme colors (cyan/sky), `storagePrefix: "frozen"` (keeps existing visitors' cached data keys). |
+| `src/index.html` | HTML shell; the build fills `{{pageTitle}}`, `{{icon}}`, languages and `<!--ANALYTICS-->` from the show settings, plus `<!--STYLES-->`, `<!--APP-->`. |
 | `src/main.jsx` | Entry: mounts `<ProductionApp />`. |
 | `src/App.jsx` | Root component: all state, data loading (fetch from Apps Script / CSV), handlers, memos. Builds a `ctx` object passed to every section. |
-| `src/config.js` | Constants: backend URL, CSV URL, calendar/Drive/YouTube IDs, image URLs, fallback track, `INITIAL_CALL_TYPES`, `TAB_INFO` route table. |
+| `src/config.js` | Engine view of the settings (`SHOW` + named constants), page registry (`ALL_TABS` → `TAB_INFO` filtered by the show's `tabs`), `DEFAULT_TAB`, `storageKey()`. |
+| `src/effects/snow.js` | Snow background (selected by `background: "snow"`). |
 | `src/lib/*.js(x)` | Helpers: `analytics` (gtag events), `dates` (call board date parsing), `music` (natural sort), `celebration` (fanfare + confetti), `links` (auto-link URLs), `cast` (`processCastRows`). |
 | `src/components/` | `Header`, `NavBar` (breadcrumb + tabs), `Footer`, `CallCard` (`renderCallCard(reh, isArchived, ctx)`). |
 | `src/tabs/` | One file per route: `CallBoardTab`, `CastTab`, `CostumesTab`, `MusicTab`, `VideosTab`, `CalendarTab`. Each renders only when its tab is active. |
 | `src/modals/` | `CalendarEventModal`, `CelebrationModal`, `LoginModal`, `EditCallModal`. |
-| `src/styles.css` | Tailwind directives + custom CSS (glass cards, snow canvas, scrollbars, Google Translate banner hiding). |
-| `tailwind.config.js` | Tailwind v3 config (custom `frozen` color scale). `src/tailwind-cdn-config.js` is the same config for the `--cdn-css` preview build. |
+| `src/styles.css` | Custom CSS (glass cards, background canvas, scrollbars, Google Translate banner hiding; colors via `theme()`), then the Tailwind directives. Tailwind must stay after the custom CSS so utilities override custom classes. |
+| `tailwind.config.js` | Maps `primary` / `accent` / `page` colors from the show theme. Themed elements use `primary-*` / `accent-*` classes. |
 | `scripts/build.mjs` | Build script (`--cdn-css` = preview build without the Tailwind CLI). |
 | `package.json` | Dev dependencies: esbuild, tailwindcss@3. |
 | `.github/workflows/deploy.yml` | Build + deploy to Pages. |
@@ -58,22 +61,22 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 | `music/Rehearsal Tracks/` | One sample mp3 + placeholder readme. Real tracks live in Google Drive. |
 | `primer.md` | This file. |
 
-## Key config (`src/config.js`)
+## Key settings (`show/show.config.js`)
 
-| Constant | What it is |
+| Setting | What it is |
 |---|---|
-| `CALLBOARD_BACKEND_URL` | Apps Script web app `/exec` URL. Changes only if a *new deployment* is created (redeploying a new version of the same deployment keeps the URL). |
-| `DIRECT_CAST_CSV_URL` | Published CSV of the cast sheet tab (fallback). |
-| `CALENDAR_ID` | Public Google Calendar for the season (also duplicated in Apps Script `CONFIG`). |
-| `GOOGLE_DRIVE_MUSIC_FOLDER_URL` | Drive music folder (same ID as Apps Script `MUSIC_ROOT_FOLDER_ID`). |
-| `YOUTUBE_REHEARSAL_PLAYLIST_ID` | YouTube playlist embedded in the music tab. |
-| `FROZEN_HERO_IMAGE_URL` | MTI hero artwork (hotlinked from mtishows.com). |
-| `TTS_PLAYERS_LOGO_URL` | Footer logo (raw GitHub URL). |
-| `PRODUCTION_AUDIO_TRACKS` | Hardcoded single-track fallback if Drive sync fails. |
-| `INITIAL_CALL_TYPES` | Default rehearsal call types for the admin dropdown. |
-| `TAB_INFO` | Defines the pages/routes (see below). |
+| `backendUrl` | Apps Script web app `/exec` URL. Changes only if a *new deployment* is created (a new version of the same deployment keeps the URL). |
+| `castCsvUrl` | Published CSV of the cast tab (fallback). |
+| `calendarId` | Public Google Calendar for the season (also hardcoded in Frozen's Apps Script `CONFIG`). |
+| `musicFolderUrl` | Drive music folder (same ID as Apps Script `MUSIC_ROOT_FOLDER_ID`). |
+| `youtubePlaylistId` | YouTube playlist embedded in the music tab. |
+| `artworkUrl` | MTI hero artwork (hotlinked from mtishows.com). |
+| `company.logoUrl` | Footer logo (raw GitHub URL to `music/` in this repo). |
+| `fallbackTracks` | Single-track fallback if Drive sync fails. |
+| `callTypes` | Default rehearsal call types for the admin dropdown. |
+| `analyticsId` | GA4 `G-1D8TXY3JM5`. |
 
-GA4 measurement ID `G-1D8TXY3JM5` is in the `<head>`.
+Frozen's Apps Script still has its IDs and PIN in code (local `apps-script/Code.gs`, git-ignored). The template's script reads them from Script Properties instead; switching Frozen to it is optional.
 
 ## Routing
 
@@ -174,7 +177,7 @@ Rehearsals sheet columns: `ID, Title, Date, Time, Location, Type, CalledRoles, F
 
 ## Workflow notes for Claude
 
-- Work in `~/Development/FrozenJR2026` through the device shell, or in a cloud clone of the GitHub repo. Edit files under `src/`; never edit `dist/` (generated, git-ignored).
+- Work in `~/Development/FrozenJR2026` through the device shell, or in a cloud clone of the GitHub repo. Frozen-only changes go in `show/show.config.js`; engine changes in `src/` (and in ShowPortalTemplate too). Never edit `dist/` (generated, git-ignored).
 - Adding a new piece of state or handler a section needs: declare it in `App.jsx`, add it to the `ctx` object, destructure it in the section. A missing name fails silently as `undefined`, so check with a type-check or the comparison harness.
 - The Mac's device shell has no network (no npm). The cloud workspace can't reach npm either but has esbuild preinstalled at /opt/npm-tools: build previews with `node scripts/build.mjs --cdn-css` after symlinking `node_modules/esbuild` and `node_modules/@esbuild` to it. Full builds (with the Tailwind CLI) run in GitHub Actions.
 - Regression check used for the restructure: render old and new builds in headless Chromium (Playwright at /opt/npm-tools, browsers at /opt/pw-browsers) with mocked backend data, click through every tab/modal, and diff the DOM.
