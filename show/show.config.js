@@ -40,6 +40,8 @@ module.exports = {
   calendarId: "49b5ea63eac530c59fd5465d1fbbe1fd385a2235e24910c4a95371c07b95b5ab@group.calendar.google.com",
   musicFolderUrl: "https://drive.google.com/drive/folders/1WpVSq_wCG0RhjirsZFZjqOR3w50j4RPe?usp=sharing",
   youtubePlaylistId: "PLBDCgs4SWfnF2517NHRg4gLkayKkYssJb",
+  videosPlaylistId: "PLVQ6pMtjbcDY",       // YouTube playlist for the Choreography Vault; "" shows "coming soon"
+  videosPlaylistTitle: "Frozen JR. Choreography & Blocking Videos",
   analyticsId: "G-1D8TXY3JM5",          // Google Analytics 4; "" to turn off
 
   // Shown on the music page if the Drive folder can't be loaded. Can be [].
