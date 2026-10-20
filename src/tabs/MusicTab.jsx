@@ -1,6 +1,6 @@
 // #music: Drive rehearsal tracks by folder, player, downloads, YouTube playlist.
 
-import { YOUTUBE_REHEARSAL_PLAYLIST_ID, GOOGLE_DRIVE_MUSIC_FOLDER_URL } from "../config";
+import { YOUTUBE_REHEARSAL_PLAYLIST_ID, GOOGLE_DRIVE_MUSIC_FOLDER_URL, SHOW, storageKey } from "../config";
 
 export function MusicTab({ ctx }) {
   const { activeTab, musicTracks, activeTrackIndex, setActiveTrackIndex, isLoadingMusic, musicTabSubView, setMusicTabSubView, folderCategories, folderNames, currentFolderTracks, fetchMusicLibrary, currentTrack, selectTrack } = ctx;
@@ -9,9 +9,9 @@ export function MusicTab({ ctx }) {
     <>
       {activeTab === 'music' && (
         <div className="space-y-6">
-          <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
+          <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-primary-400">
             <div>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-primary-400 bg-primary-950 px-2.5 py-1 rounded-full border border-primary-800">
                 Official Rehearsal Audio Vault
               </span>
               <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Show Music & Guide Vocals</h3>
@@ -25,14 +25,14 @@ export function MusicTab({ ctx }) {
                 href={GOOGLE_DRIVE_MUSIC_FOLDER_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-800 transition flex items-center gap-2 shadow-md"
+                className="bg-slate-900 hover:bg-slate-800 text-primary-300 text-xs font-bold px-4 py-2.5 rounded-xl border border-primary-800 transition flex items-center gap-2 shadow-md"
               >
                 <span>Open Drive Folder ↗</span>
               </a>
 
               <button
                 onClick={() => {
-                  localStorage.removeItem('frozen_music_tracks');
+                  localStorage.removeItem(storageKey('music_tracks'));
                   fetchMusicLibrary();
                 }}
                 disabled={isLoadingMusic}
@@ -45,7 +45,7 @@ export function MusicTab({ ctx }) {
           </div>
 
           {/* Dynamic Multi-Folder Switcher */}
-          <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-2xl border border-cyan-900/80 w-fit">
+          <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-2xl border border-primary-900/80 w-fit">
             {folderNames.map(folder => {
               const count = folderCategories[folder]?.length || 0;
               const isSelected = musicTabSubView === folder;
@@ -62,14 +62,14 @@ export function MusicTab({ ctx }) {
                   }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                     isSelected
-                      ? 'bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md'
+                      ? 'bg-gradient-to-r from-primary-600 to-accent-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   <span>🎧 {folder}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
                     isSelected 
-                      ? 'bg-cyan-950/80 border-cyan-400/50 text-cyan-200' 
+                      ? 'bg-primary-950/80 border-primary-400/50 text-primary-200' 
                       : 'bg-slate-900 border-slate-700 text-slate-400'
                   }`}>
                     {count}
@@ -94,14 +94,20 @@ export function MusicTab({ ctx }) {
             </button>
           </div>
 
-          {musicTabSubView !== 'youtube' && (
+          {musicTabSubView !== 'youtube' && !currentTrack && (
+            <div className="glass-card p-8 text-center text-slate-400 rounded-3xl">
+              No rehearsal tracks yet. Add audio files to the show's Drive music folder, then press Sync Folder.
+            </div>
+          )}
+
+          {musicTabSubView !== 'youtube' && currentTrack && (
             <div className="space-y-4">
               {/* Active Player Card */}
-              <div className="glass-card p-6 rounded-3xl border border-cyan-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-900/60 pb-5 mb-5">
+              <div className="glass-card p-6 rounded-3xl border border-primary-400/50 shadow-2xl relative overflow-hidden bg-gradient-to-b from-slate-900/90 to-slate-950/95">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-primary-900/60 pb-5 mb-5">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                      <span className="text-[10px] uppercase tracking-widest text-primary-400 font-extrabold bg-primary-950 px-2 py-0.5 rounded border border-primary-800">
                         STREAMING AUDIO
                       </span>
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -120,13 +126,13 @@ export function MusicTab({ ctx }) {
                     href={currentTrack.downloadUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="bg-slate-900 hover:bg-slate-800 text-cyan-300 px-4 py-2.5 rounded-xl border border-cyan-900 text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-center shadow-md"
+                    className="bg-slate-900 hover:bg-slate-800 text-primary-300 px-4 py-2.5 rounded-xl border border-primary-900 text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-center shadow-md"
                   >
                     <span>⬇ Download Audio</span>
                   </a>
                 </div>
 
-                <div className="w-full bg-slate-950/95 rounded-2xl p-2.5 border border-cyan-500/40 overflow-hidden shadow-2xl">
+                <div className="w-full bg-slate-950/95 rounded-2xl p-2.5 border border-primary-500/40 overflow-hidden shadow-2xl">
                   <iframe
                     src={currentTrack.previewUrl}
                     width="100%"
@@ -139,8 +145,8 @@ export function MusicTab({ ctx }) {
               </div>
 
               {/* Scoped Track List */}
-              <div className="glass-card p-5 rounded-3xl border border-cyan-500/20">
-                <div className="flex items-center justify-between pb-3 border-b border-cyan-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
+              <div className="glass-card p-5 rounded-3xl border border-primary-500/20">
+                <div className="flex items-center justify-between pb-3 border-b border-primary-950 mb-3 text-xs text-slate-400 font-bold uppercase tracking-wider">
                   <span>{musicTabSubView} Tracks ({currentFolderTracks.length})</span>
                   <span>Action</span>
                 </div>
@@ -155,21 +161,21 @@ export function MusicTab({ ctx }) {
                         key={track.id || idx}
                         onClick={() => selectTrack(globalIdx)}
                         className={`py-3.5 px-3 rounded-2xl transition flex items-center justify-between gap-4 cursor-pointer group ${
-                          isActive ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-900/60'
+                          isActive ? 'bg-primary-950/60 border border-primary-800/60' : 'hover:bg-slate-900/60'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition ${
                             isActive 
-                              ? 'bg-cyan-500 text-slate-950 font-black' 
-                              : 'bg-slate-900 border border-slate-800 text-cyan-400 group-hover:border-cyan-500'
+                              ? 'bg-primary-500 text-slate-950 font-black' 
+                              : 'bg-slate-900 border border-slate-800 text-primary-400 group-hover:border-primary-500'
                           }`}>
                             {idx + 1}
                           </div>
 
                           <div>
                             <h4 className={`text-sm font-bold font-cinzel leading-snug transition ${
-                              isActive ? 'text-cyan-300' : 'text-white group-hover:text-cyan-200'
+                              isActive ? 'text-primary-300' : 'text-white group-hover:text-primary-200'
                             }`}>
                               {track.title}
                             </h4>
@@ -188,8 +194,8 @@ export function MusicTab({ ctx }) {
                             }}
                             className={`text-xs px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 ${
                               isActive
-                                ? 'bg-cyan-500 text-slate-950 font-black'
-                                : 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700'
+                                ? 'bg-primary-500 text-slate-950 font-black'
+                                : 'bg-slate-900 hover:bg-slate-800 text-primary-300 border border-slate-700'
                             }`}
                           >
                             <span>{isActive ? 'Selected' : 'Load Track'}</span>
@@ -214,12 +220,12 @@ export function MusicTab({ ctx }) {
           )}
 
           {musicTabSubView === 'youtube' && (
-            <div className="glass-card rounded-3xl overflow-hidden p-3 md:p-5 border border-cyan-500/20 shadow-2xl">
+            <div className="glass-card rounded-3xl overflow-hidden p-3 md:p-5 border border-primary-500/20 shadow-2xl">
               <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
                 <iframe
                   className="w-full h-full"
                   src={`https://www.youtube-nocookie.com/embed/videoseries?list=${YOUTUBE_REHEARSAL_PLAYLIST_ID}`}
-                  title="Frozen JR. Rehearsal Music Playlist"
+                  title={SHOW.playlistTitle}
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen

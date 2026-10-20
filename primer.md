@@ -1,7 +1,7 @@
 # FrozenJR2026 — Project Primer
 
 > Read this first at the start of any session on this project. It is the working context for Claude.
-> Last updated: 2026-10-19 (initial handoff from Gemini-built code to Claude).
+> Last updated: 2026-10-19. Restructured from one index.html into src/ modules with a build step (branch `restructure-build`).
 
 ## What this is
 
@@ -15,7 +15,7 @@ A single-page **production portal and call board** for TTS Players' (Haverhill /
 ## Architecture at a glance
 
 ```
-Browser (GitHub Pages: index.html, React via in-browser Babel)
+Browser (GitHub Pages: built dist/ — index.html + assets/app-<hash>.js + assets/styles-<hash>.css)
    │  GET  ?action=…            POST {action, pin, …}  (Content-Type: text/plain to avoid CORS preflight)
    ▼
 Google Apps Script Web App  (CALLBOARD_BACKEND_URL …/macros/s/AKfycby…/exec)
@@ -28,13 +28,28 @@ Google Apps Script Web App  (CALLBOARD_BACKEND_URL …/macros/s/AKfycby…/exec)
 Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_CSV_URL) if the backend fails.
 ```
 
-There is **no build step**. `index.html` loads React 18 UMD, ReactDOM, Babel Standalone, Tailwind (CDN), canvas-confetti, Google Translate and GA4 from CDNs, and the whole app is one `<script type="text/babel">` block. Editing `index.html` and pushing to `main` is the deploy.
+**Build:** source lives in `src/`. `npm run build` (scripts/build.mjs) bundles the JSX with esbuild into one minified `assets/app-<hash>.js`, compiles Tailwind v3 + `src/styles.css` into `assets/styles-<hash>.css`, and writes `dist/index.html`. React 18 / ReactDOM still load as global UMD scripts from unpkg; canvas-confetti, Google Translate, GA4 and Google Fonts load from CDNs. No Babel and no Tailwind CDN in the browser.
+
+**Deploy:** `.github/workflows/deploy.yml` builds on every push; pushes to `main` deploy `dist/` to GitHub Pages. Requires repo Settings → Pages → Source = "GitHub Actions". Other branches only build (a CI check).
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `index.html` | Entire frontend (~2,640 lines). Config constants at the top of the Babel script (~line 147), helpers, then one big `ProductionApp` component. |
+| `src/index.html` | HTML shell (head, analytics, translate, fonts, `#root`). Build markers `<!--STYLES-->`, `<!--APP-->`. |
+| `src/main.jsx` | Entry: mounts `<ProductionApp />`. |
+| `src/App.jsx` | Root component: all state, data loading (fetch from Apps Script / CSV), handlers, memos. Builds a `ctx` object passed to every section. |
+| `src/config.js` | Constants: backend URL, CSV URL, calendar/Drive/YouTube IDs, image URLs, fallback track, `INITIAL_CALL_TYPES`, `TAB_INFO` route table. |
+| `src/lib/*.js(x)` | Helpers: `analytics` (gtag events), `dates` (call board date parsing), `music` (natural sort), `celebration` (fanfare + confetti), `links` (auto-link URLs), `cast` (`processCastRows`). |
+| `src/components/` | `Header`, `NavBar` (breadcrumb + tabs), `Footer`, `CallCard` (`renderCallCard(reh, isArchived, ctx)`). |
+| `src/tabs/` | One file per route: `CallBoardTab`, `CastTab`, `CostumesTab`, `MusicTab`, `VideosTab`, `CalendarTab`. Each renders only when its tab is active. |
+| `src/modals/` | `CalendarEventModal`, `CelebrationModal`, `LoginModal`, `EditCallModal`. |
+| `src/styles.css` | Tailwind directives + custom CSS (glass cards, snow canvas, scrollbars, Google Translate banner hiding). |
+| `tailwind.config.js` | Tailwind v3 config (custom `frozen` color scale). `src/tailwind-cdn-config.js` is the same config for the `--cdn-css` preview build. |
+| `scripts/build.mjs` | Build script (`--cdn-css` = preview build without the Tailwind CLI). |
+| `package.json` | Dev dependencies: esbuild, tailwindcss@3. |
+| `.github/workflows/deploy.yml` | Build + deploy to Pages. |
+| `index.html` (root) | **Old single-file version**, kept as a fallback until the Actions deploy is confirmed; delete after switch-over. |
 | `apps-script/Code.gs` | Plain-text copy of the Apps Script backend (converted 2026-10-19 from the original TextEdit RTF). **Git-ignored** because it contains the admin PIN. Reference copy only; the live script is edited and deployed at script.google.com. Keep this file in sync whenever the backend changes. |
 | `AppScript for Frozen.txt` | Original RTF copy from TextEdit. Superseded by `apps-script/Code.gs`; git-ignored; safe to delete. |
 | `.gitignore` | Keeps `apps-script/` and the RTF copy out of the public repo. |
@@ -43,7 +58,7 @@ There is **no build step**. `index.html` loads React 18 UMD, ReactDOM, Babel Sta
 | `music/Rehearsal Tracks/` | One sample mp3 + placeholder readme. Real tracks live in Google Drive. |
 | `primer.md` | This file. |
 
-## Key config (index.html, top of Babel script)
+## Key config (`src/config.js`)
 
 | Constant | What it is |
 |---|---|
@@ -152,7 +167,6 @@ Rehearsals sheet columns: `ID, Title, Date, Time, Location, Type, CalledRoles, F
 - Auth is a shared PIN, stored in `sessionStorage` and sent with every write. Fine for a call board; not real security.
 - Admin edits update `localStorage` before the backend confirms; a failed save shows an alert but local view may diverge until refresh.
 - Each visitor's `localStorage` caches data; stale-data bugs may be cache, not backend.
-- In-browser Babel compiles ~2,600 lines on every page load (slower first paint on phones). A build step or precompiled JS would fix it if ever needed.
 - Hero image is hotlinked from mtishows.com and could break if MTI changes the URL.
 - `getMusic` only reads one level of subfolders.
 - Calendar window is fixed at −14 / +240 days in the backend.
@@ -160,7 +174,10 @@ Rehearsals sheet columns: `ID, Title, Date, Time, Location, Type, CalledRoles, F
 
 ## Workflow notes for Claude
 
-- Work in `~/Development/FrozenJR2026` through the device shell. Edit `index.html` in place (sed/python), never by retyping it.
+- Work in `~/Development/FrozenJR2026` through the device shell, or in a cloud clone of the GitHub repo. Edit files under `src/`; never edit `dist/` (generated, git-ignored).
+- Adding a new piece of state or handler a section needs: declare it in `App.jsx`, add it to the `ctx` object, destructure it in the section. A missing name fails silently as `undefined`, so check with a type-check or the comparison harness.
+- The Mac's device shell has no network (no npm). The cloud workspace can't reach npm either but has esbuild preinstalled at /opt/npm-tools: build previews with `node scripts/build.mjs --cdn-css` after symlinking `node_modules/esbuild` and `node_modules/@esbuild` to it. Full builds (with the Tailwind CLI) run in GitHub Actions.
+- Regression check used for the restructure: render old and new builds in headless Chromium (Playwright at /opt/npm-tools, browsers at /opt/pw-browsers) with mocked backend data, click through every tab/modal, and diff the DOM.
 - Git needs **deletion permission** on the folder (lock files). Request it once before the first commit.
 - Commit with clear messages (not "Update index.html"). Pushing over SSH from Claude's shell may be blocked; if so, the user pushes or the remote is switched to HTTPS.
 - Pushing to `main` deploys to GitHub Pages within ~1 minute. Verify at the live URL in the browser pane after pushing.

@@ -1,4 +1,5 @@
 // Cast reveal fanfare: Web Audio chime + canvas-confetti burst.
+import { SHOW } from "../config";
 
 export function playAudibleFanfare() {
   try {
@@ -38,7 +39,7 @@ export function playAudibleFanfare() {
 export function launchFanfareCelebration() {
   playAudibleFanfare();
   if (typeof confetti === 'function') {
-    const colors = ['#38bdf8', '#7dd3fc', '#bae6fd', '#f472b6', '#fbbf24', '#ffffff'];
+    const colors = SHOW.theme.confetti;
     confetti({ particleCount: 65, angle: 60, spread: 70, origin: { x: 0.1, y: 0.7 }, colors });
     confetti({ particleCount: 65, angle: 120, spread: 70, origin: { x: 0.9, y: 0.7 }, colors });
     setTimeout(() => {

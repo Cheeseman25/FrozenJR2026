@@ -17,7 +17,7 @@ export function CallBoardTab({ ctx }) {
                   placeholder="Filter by actor or character role..."
                   value={callSearchRole}
                   onChange={(e) => setCallSearchRole(e.target.value)}
-                  className="w-full bg-slate-950/70 border border-cyan-800/70 rounded-xl px-4 py-2.5 text-sm text-cyan-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                  className="w-full bg-slate-950/70 border border-primary-800/70 rounded-xl px-4 py-2.5 text-sm text-primary-100 placeholder-slate-400 focus:outline-none focus:border-primary-400"
                 />
                 {callSearchRole && (
                   <button 
@@ -64,7 +64,7 @@ export function CallBoardTab({ ctx }) {
 
           {/* COLLAPSIBLE ARCHIVED VAULT BANNER */}
           {archivedCalls.length > 0 && (
-            <div className="pt-4 border-t border-cyan-900/40">
+            <div className="pt-4 border-t border-primary-900/40">
               <div className="glass-card rounded-2xl overflow-hidden border border-slate-700/60">
                 <button
                   type="button"
@@ -88,7 +88,7 @@ export function CallBoardTab({ ctx }) {
                     </div>
                   </div>
 
-                  <span className="text-xs font-bold text-cyan-400 flex items-center gap-1">
+                  <span className="text-xs font-bold text-primary-400 flex items-center gap-1">
                     <span>{showArchivedSection ? 'Hide Archived' : 'View Archived'}</span>
                     <span className={`transform transition-transform duration-200 ${showArchivedSection ? 'rotate-180' : ''}`}>▼</span>
                   </span>
