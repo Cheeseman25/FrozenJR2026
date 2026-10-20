@@ -9,7 +9,7 @@ export function NavBar({ ctx }) {
     <>
       <div className="flex items-center justify-between py-2 px-3 mb-4 rounded-xl bg-slate-950/60 border border-primary-950 text-xs">
         <div className="flex items-center gap-1.5 text-slate-400">
-          <span className="text-primary-400">{SHOW.breadcrumbIcon} {SHOW.shortTitle}</span>
+          <span className="text-primary-400">{`${SHOW.breadcrumbIcon} ${SHOW.shortTitle}`}</span>
           <span>/</span>
           <span className="text-slate-300 font-semibold">{TAB_INFO[activeTab]?.icon} {TAB_INFO[activeTab]?.label}</span>
           <span className="hidden sm:inline font-mono text-[11px] text-primary-500/70">#{activeTab}</span>

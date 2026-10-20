@@ -9,24 +9,26 @@ export function CastTab({ ctx }) {
     <>
       {activeTab === 'cast' && (
         <div className="space-y-6">
-          <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-primary-950/60 p-5">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-2xl shrink-0 shadow-lg">
-                ✨
-              </div>
-              <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest bg-purple-950 text-purple-300 px-2.5 py-0.5 rounded border border-purple-700/60">
-                  Casting & Role Assignment Notice
-                </span>
-                <h3 className="font-cinzel font-bold text-white text-base md:text-lg mt-1">
-                  Cast & Ensemble Assignments
-                </h3>
-                <p className="text-xs md:text-sm text-purple-100/90 mt-1.5 leading-relaxed font-medium">
-                  {SHOW.castNotice}
-                </p>
+          {SHOW.castNotice && (
+            <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/70 via-slate-900/80 to-primary-950/60 p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-2xl shrink-0 shadow-lg">
+                  ✨
+                </div>
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest bg-purple-950 text-purple-300 px-2.5 py-0.5 rounded border border-purple-700/60">
+                    Casting & Role Assignment Notice
+                  </span>
+                  <h3 className="font-cinzel font-bold text-white text-base md:text-lg mt-1">
+                    Cast & Ensemble Assignments
+                  </h3>
+                  <p className="text-xs md:text-sm text-purple-100/90 mt-1.5 leading-relaxed font-medium">
+                    {SHOW.castNotice}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="glass-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border-l-4 border-l-primary-400">
             <div className="flex items-center gap-3">

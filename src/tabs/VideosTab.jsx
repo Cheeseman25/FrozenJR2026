@@ -27,9 +27,13 @@ export function VideosTab({ ctx }) {
             </div>
             <h3 className="text-xl font-bold font-cinzel text-white">Choreography Videos Coming Soon</h3>
             <p className="text-xs md:text-sm text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
-              As our choreographers and directors stage numbers like {SHOW.exampleNumbers.map((n, i, all) => (
-                <React.Fragment key={n}>{i > 0 && (i === all.length - 1 ? ', and ' : ', ')}<em>{n}</em></React.Fragment>
-              ))}, rehearsal breakdown videos will be linked here for home practice.
+              {SHOW.exampleNumbers.length > 0 ? (
+                <>As our choreographers and directors stage numbers like {SHOW.exampleNumbers.map((n, i, all) => (
+                  <React.Fragment key={n}>{i > 0 && (i === all.length - 1 ? ', and ' : ', ')}<em>{n}</em></React.Fragment>
+                ))}, rehearsal breakdown videos will be linked here for home practice.</>
+              ) : (
+                <>As our choreographers and directors stage each number, rehearsal breakdown videos will be linked here for home practice.</>
+              )}
             </p>
           </div>
         </div>

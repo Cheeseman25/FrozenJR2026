@@ -9,14 +9,14 @@ export function Header({ ctx }) {
     <>
       <header className="flex flex-col md:flex-row items-center justify-between gap-5 border-b border-primary-500/20 pb-6 mb-5">
         <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-          <div className="relative group shrink-0">
+          {ARTWORK_URL && <div className="relative group shrink-0">
             <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-accent-400 to-primary-600 opacity-40 blur-md group-hover:opacity-75 transition duration-500"></div>
             <img 
               src={ARTWORK_URL} 
               alt={`${SHOW.title} Official Artwork`}
               className="relative h-20 md:h-24 w-auto max-w-[280px] sm:max-w-[340px] rounded-xl object-contain shadow-2xl border border-primary-400/40 bg-slate-950/80 p-1"
             />
-          </div>
+          </div>}
 
           <div className="border-t sm:border-t-0 sm:border-l border-primary-700/50 pt-3 sm:pt-0 sm:pl-5">
             <span className="text-[11px] uppercase tracking-widest text-primary-300 font-extrabold bg-primary-950/90 px-3 py-1 rounded-full border border-primary-700/70 inline-block mb-1.5 shadow-sm">

@@ -26,13 +26,13 @@ export function CelebrationModal({ ctx }) {
                 ✕
               </button>
 
-              <div className="mb-4">
+              {ARTWORK_URL && <div className="mb-4">
                 <img 
                   src={ARTWORK_URL} 
                   alt={`${SHOW.title} Official Artwork`}
                   className="h-16 md:h-20 w-auto rounded-xl object-contain shadow-xl border border-primary-400/40 bg-slate-950/90 p-1"
                 />
-              </div>
+              </div>}
 
               <span className="text-[11px] uppercase tracking-widest text-primary-400 font-extrabold bg-primary-950/90 border border-primary-700/60 px-3 py-1 rounded-full mb-2">
                 OFFICIAL PRODUCTION CASTING
