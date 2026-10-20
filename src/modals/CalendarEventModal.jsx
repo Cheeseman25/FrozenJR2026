@@ -38,7 +38,7 @@ export function CalendarEventModal({ ctx }) {
             onClick={() => setSelectedCalendarEvent(null)}
           >
             <div 
-              className="glass-card max-w-xl w-full p-6 md:p-8 rounded-3xl border border-cyan-400/40 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+              className="glass-card max-w-xl w-full p-6 md:p-8 rounded-3xl border border-primary-400/40 shadow-2xl relative animate-in fade-in zoom-in duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               <button 
@@ -49,7 +49,7 @@ export function CalendarEventModal({ ctx }) {
               </button>
 
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-extrabold bg-cyan-950/90 border border-cyan-700/60 px-3 py-1 rounded-full">
+                <span className="text-[10px] uppercase tracking-widest text-primary-400 font-extrabold bg-primary-950/90 border border-primary-700/60 px-3 py-1 rounded-full">
                   SCHEDULED EVENT
                 </span>
                 {ev.isAllDay && (
@@ -63,8 +63,8 @@ export function CalendarEventModal({ ctx }) {
                 {ev.title}
               </h2>
 
-              <div className="bg-slate-900/90 border border-cyan-900/80 rounded-2xl p-4 my-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm text-cyan-200 font-bold">
+              <div className="bg-slate-900/90 border border-primary-900/80 rounded-2xl p-4 my-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm text-primary-200 font-bold">
                   <span>📅</span>
                   <span>{dateStr}</span>
                 </div>
@@ -116,7 +116,7 @@ export function CalendarEventModal({ ctx }) {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => trackAnalyticsEvent('open_google_calendar_click', { event_title: ev.title })}
-                  className="w-full sm:flex-1 bg-slate-900 hover:bg-slate-800 border border-cyan-800 text-cyan-300 hover:text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5"
+                  className="w-full sm:flex-1 bg-slate-900 hover:bg-slate-800 border border-primary-800 text-primary-300 hover:text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5"
                 >
                   <span>🗓 Open in Google Calendar</span>
                 </a>

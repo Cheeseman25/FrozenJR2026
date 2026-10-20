@@ -13,10 +13,10 @@ export function renderCallCard(reh, isArchivedView, ctx) {
   return (
     <div 
       key={reh.id} 
-      className={`glass-card p-6 rounded-2xl relative transition hover:border-cyan-400/50 ${
+      className={`glass-card p-6 rounded-2xl relative transition hover:border-primary-400/50 ${
         isArchivedView 
           ? 'opacity-80 border-l-4 border-l-slate-500 bg-slate-950/70' 
-          : isFullCast ? 'border-l-4 border-l-cyan-400' : 'border-l-4 border-l-amber-400'
+          : isFullCast ? 'border-l-4 border-l-primary-400' : 'border-l-4 border-l-amber-400'
       }`}
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-700/50 pb-4 mb-4">
@@ -26,7 +26,7 @@ export function renderCallCard(reh, isArchivedView, ctx) {
               isArchivedView
                 ? 'bg-slate-800 text-slate-300 border border-slate-700'
                 : isFullCast 
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' 
+                  ? 'bg-primary-950 text-primary-300 border border-primary-800' 
                   : 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
             }`}>
               {reh.type}
@@ -50,9 +50,9 @@ export function renderCallCard(reh, isArchivedView, ctx) {
         </div>
 
         {(formattedDate || reh.time) && (
-          <div className="bg-slate-900/90 border border-cyan-900 px-4 py-2 rounded-xl text-left md:text-right shrink-0">
+          <div className="bg-slate-900/90 border border-primary-900 px-4 py-2 rounded-xl text-left md:text-right shrink-0">
             {formattedDate && (
-              <div className="text-sm font-black text-cyan-300">
+              <div className="text-sm font-black text-primary-300">
                 {formattedDate}
               </div>
             )}
@@ -63,7 +63,7 @@ export function renderCallCard(reh, isArchivedView, ctx) {
 
       <div className="grid md:grid-cols-2 gap-4 text-sm">
         <div className="bg-slate-950/50 p-3.5 rounded-xl border border-slate-800">
-          <div className="text-xs uppercase tracking-wider text-cyan-400 font-bold mb-2 flex items-center justify-between">
+          <div className="text-xs uppercase tracking-wider text-primary-400 font-bold mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5">👥 Called Performers:</span>
             <span className="text-[10px] text-slate-400 font-normal">
               {Array.isArray(reh.calledRoles) ? `${reh.calledRoles.length} called` : ''}
@@ -74,7 +74,7 @@ export function renderCallCard(reh, isArchivedView, ctx) {
               reh.calledRoles.map((roleTag, i) => (
                 <span 
                   key={i} 
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-cyan-500/20 text-cyan-200 border-cyan-500/40"
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-primary-500/20 text-primary-200 border-primary-500/40"
                 >
                   {roleTag}
                 </span>
@@ -102,8 +102,8 @@ export function renderCallCard(reh, isArchivedView, ctx) {
       </div>
 
       {reh.notes && (
-        <div className="mt-3 text-xs text-cyan-200/90 bg-cyan-950/30 border border-cyan-800/40 p-2.5 rounded-lg flex items-start gap-2">
-          <span className="text-cyan-400 font-bold">📝 Note:</span>
+        <div className="mt-3 text-xs text-primary-200/90 bg-primary-950/30 border border-primary-800/40 p-2.5 rounded-lg flex items-start gap-2">
+          <span className="text-primary-400 font-bold">📝 Note:</span>
           <span className="leading-relaxed">{renderWithLinks(reh.notes)}</span>
         </div>
       )}
@@ -113,7 +113,7 @@ export function renderCallCard(reh, isArchivedView, ctx) {
           <button
             type="button"
             onClick={() => openEditCall(reh)}
-            className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+            className="text-primary-400 hover:text-primary-300 font-semibold flex items-center gap-1">
             ✏️ Edit Call
           </button>
 

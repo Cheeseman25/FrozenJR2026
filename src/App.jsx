@@ -1,5 +1,6 @@
 // Root component: owns all state, data loading and handlers; renders the page sections.
-import { CALLBOARD_BACKEND_URL, DIRECT_CAST_CSV_URL, PRODUCTION_AUDIO_TRACKS, INITIAL_CALL_TYPES, TAB_INFO } from "./config";
+import { SHOW, CALLBOARD_BACKEND_URL, DIRECT_CAST_CSV_URL, FALLBACK_TRACKS, INITIAL_CALL_TYPES, TAB_INFO, DEFAULT_TAB, storageKey } from "./config";
+import { startSnow } from "./effects/snow";
 import { trackAnalyticsEvent } from "./lib/analytics";
 import { parseDateTimestamp } from "./lib/dates";
 import { naturalTrackSorter } from "./lib/music";
@@ -24,14 +25,14 @@ const { useState, useEffect, useRef, useMemo } = React;
 export function ProductionApp() {
   const getInitialTab = () => {
     const hash = window.location.hash.replace('#', '').toLowerCase();
-    return TAB_INFO[hash] ? hash : 'callboard';
+    return TAB_INFO[hash] ? hash : DEFAULT_TAB;
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [copiedBreadcrumb, setCopiedBreadcrumb] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState('en');
 
-  const [adminSessionToken, setAdminSessionToken] = useState(() => sessionStorage.getItem('frozen_admin_token') || '');
+  const [adminSessionToken, setAdminSessionToken] = useState(() => sessionStorage.getItem(storageKey('admin_token')) || '');
   const isAdmin = Boolean(adminSessionToken);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [adminPinInput, setAdminPinInput] = useState('');
@@ -39,10 +40,10 @@ export function ProductionApp() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   const [actorList, setActorList] = useState(() => {
-    const saved = localStorage.getItem('frozen_cast_list');
+    const saved = localStorage.getItem(storageKey('cast_list'));
     return saved ? JSON.parse(saved) : [];
   });
-  const [isLoadingCast, setIsLoadingCast] = useState(() => !localStorage.getItem('frozen_cast_list'));
+  const [isLoadingCast, setIsLoadingCast] = useState(() => !localStorage.getItem(storageKey('cast_list')));
   const [castError, setCastError] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [castFilterQuery, setCastFilterQuery] = useState('');
@@ -51,12 +52,12 @@ export function ProductionApp() {
   const [celebrationTarget, setCelebrationTarget] = useState(null);
 
   const [callTypes, setCallTypes] = useState(() => {
-    const saved = localStorage.getItem('frozen_call_types');
+    const saved = localStorage.getItem(storageKey('call_types'));
     return saved ? JSON.parse(saved) : INITIAL_CALL_TYPES;
   });
 
   const [rehearsals, setRehearsals] = useState(() => {
-    const saved = localStorage.getItem('frozen_rehearsals');
+    const saved = localStorage.getItem(storageKey('rehearsals'));
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -71,17 +72,17 @@ export function ProductionApp() {
   const [showArchivedSection, setShowArchivedSection] = useState(false);
 
   const [calendarEvents, setCalendarEvents] = useState(() => {
-    const saved = localStorage.getItem('frozen_calendar_events');
+    const saved = localStorage.getItem(storageKey('calendar_events'));
     return saved ? JSON.parse(saved) : [];
   });
-  const [isLoadingCalendar, setIsLoadingCalendar] = useState(() => !localStorage.getItem('frozen_calendar_events'));
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState(() => !localStorage.getItem(storageKey('calendar_events')));
   const [calendarSearch, setCalendarSearch] = useState('');
   const [calendarViewMode, setCalendarViewMode] = useState('next8');
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState(null);
 
   const [musicTracks, setMusicTracks] = useState(() => {
     try {
-      const saved = localStorage.getItem('frozen_music_tracks');
+      const saved = localStorage.getItem(storageKey('music_tracks'));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].previewUrl) {
@@ -89,7 +90,7 @@ export function ProductionApp() {
         }
       }
     } catch(e) {}
-    return PRODUCTION_AUDIO_TRACKS;
+    return FALLBACK_TRACKS;
   });
 
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
@@ -142,69 +143,11 @@ export function ProductionApp() {
   const [callModalPerformerFilter, setCallModalPerformerFilter] = useState('');
 
   /* Background Snowfall Animation */
+  // Page background effect chosen in the show settings.
   useEffect(() => {
-    const canvas = document.getElementById('snow-canvas');
+    const canvas = document.getElementById('bg-canvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animId;
-
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
-
-    const handleResize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', handleResize);
-
-    const flakeCount = Math.floor(Math.min(width, 1400) * 0.055);
-    const flakes = [];
-
-    for (let i = 0; i < flakeCount; i++) {
-      flakes.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        radius: Math.random() * 2.2 + 0.8,
-        speedY: Math.random() * 0.6 + 0.35,
-        swayOffset: Math.random() * Math.PI * 2,
-        opacity: Math.random() * 0.55 + 0.25
-      });
-    }
-
-    let angle = 0;
-    const render = () => {
-      ctx.clearRect(0, 0, width, height);
-      angle += 0.008;
-
-      for (let i = 0; i < flakes.length; i++) {
-        const f = flakes[i];
-        f.y += f.speedY;
-        f.x += Math.sin(angle + f.swayOffset) * 0.55;
-
-        if (f.y > height + 5) {
-          f.y = -5;
-          f.x = Math.random() * width;
-        }
-        if (f.x > width + 5) f.x = -5;
-        else if (f.x < -5) f.x = width + 5;
-
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2, false);
-        ctx.fillStyle = `rgba(224, 242, 254, ${f.opacity})`;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = 'rgba(186, 230, 253, 0.4)';
-        ctx.fill();
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animId);
-    };
+    if (SHOW.background === 'snow') return startSnow(canvas);
   }, []);
 
   const triggerLanguageTranslation = (langCode) => {
@@ -272,7 +215,7 @@ export function ProductionApp() {
           const parsed = processCastRows(data);
           if (parsed.length > 0) {
             setActorList(parsed);
-            localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
+            localStorage.setItem(storageKey('cast_list'), JSON.stringify(parsed));
             setIsLoadingCast(false);
             return;
           }
@@ -304,7 +247,7 @@ export function ProductionApp() {
       const parsed = processCastRows(rawLines);
       if (parsed.length > 0) {
         setActorList(parsed);
-        localStorage.setItem('frozen_cast_list', JSON.stringify(parsed));
+        localStorage.setItem(storageKey('cast_list'), JSON.stringify(parsed));
       }
     } catch (fallbackErr) {
       if (actorList.length === 0) {
@@ -333,7 +276,7 @@ export function ProductionApp() {
         });
         formatted.sort((a, b) => parseDateTimestamp(b.date) - parseDateTimestamp(a.date));
         setRehearsals(formatted);
-        localStorage.setItem('frozen_rehearsals', JSON.stringify(formatted));
+        localStorage.setItem(storageKey('rehearsals'), JSON.stringify(formatted));
         setBackendStatus('Connected to Google Sheet Backend');
       }
     } catch (e) {
@@ -351,7 +294,7 @@ export function ProductionApp() {
       if (Array.isArray(data)) {
         data.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
         setCalendarEvents(data);
-        localStorage.setItem('frozen_calendar_events', JSON.stringify(data));
+        localStorage.setItem(storageKey('calendar_events'), JSON.stringify(data));
       }
     } catch (err) {
     } finally {
@@ -377,7 +320,7 @@ export function ProductionApp() {
       if (clean.length > 0) {
         clean.sort(naturalTrackSorter);
         setMusicTracks(clean);
-        localStorage.setItem('frozen_music_tracks', JSON.stringify(clean));
+        localStorage.setItem(storageKey('music_tracks'), JSON.stringify(clean));
       }
     } catch (err) {
       console.log("Drive sync error:", err);
@@ -387,6 +330,13 @@ export function ProductionApp() {
   };
 
   useEffect(() => {
+    if (!CALLBOARD_BACKEND_URL) {
+      // New show without a backend yet: show empty pages instead of failing requests.
+      setBackendStatus('Backend not connected yet (set backendUrl in show settings)');
+      setIsLoadingCast(false);
+      setIsLoadingCalendar(false);
+      return;
+    }
     loadLiveCast();
     fetchBackendRehearsals();
     fetchCalendarEvents();
@@ -394,14 +344,14 @@ export function ProductionApp() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('frozen_rehearsals', JSON.stringify(rehearsals));
+    localStorage.setItem(storageKey('rehearsals'), JSON.stringify(rehearsals));
   }, [rehearsals]);
 
   useEffect(() => {
-    localStorage.setItem('frozen_call_types', JSON.stringify(callTypes));
+    localStorage.setItem(storageKey('call_types'), JSON.stringify(callTypes));
   }, [callTypes]);
 
-  const currentTrack = musicTracks[activeTrackIndex] || PRODUCTION_AUDIO_TRACKS[0];
+  const currentTrack = musicTracks[activeTrackIndex] || FALLBACK_TRACKS[0];
 
   const selectTrack = (index) => {
     setActiveTrackIndex(index);
@@ -422,7 +372,7 @@ export function ProductionApp() {
       const result = await res.json();
 
       if (result.status === 'success') {
-        sessionStorage.setItem('frozen_admin_token', adminPinInput);
+        sessionStorage.setItem(storageKey('admin_token'), adminPinInput);
         setAdminSessionToken(adminPinInput);
         setShowLoginModal(false);
         setAdminPinInput('');
@@ -439,7 +389,7 @@ export function ProductionApp() {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('frozen_admin_token');
+    sessionStorage.removeItem(storageKey('admin_token'));
     setAdminSessionToken('');
     trackAnalyticsEvent('admin_logout');
   };
@@ -588,7 +538,7 @@ export function ProductionApp() {
 
     updated.sort((a, b) => parseDateTimestamp(b.date) - parseDateTimestamp(a.date));
     setRehearsals(updated);
-    localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
+    localStorage.setItem(storageKey('rehearsals'), JSON.stringify(updated));
     setIsEditingCall(false);
 
     if (CALLBOARD_BACKEND_URL) {
@@ -619,7 +569,7 @@ export function ProductionApp() {
       const updated = rehearsals.map(r => r.id === reh.id ? updatedEntry : r);
       updated.sort((a, b) => parseDateTimestamp(b.date) - parseDateTimestamp(a.date));
       setRehearsals(updated);
-      localStorage.setItem('frozen_rehearsals', JSON.stringify(updated));
+      localStorage.setItem(storageKey('rehearsals'), JSON.stringify(updated));
 
       if (CALLBOARD_BACKEND_URL) {
         try {

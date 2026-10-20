@@ -1,5 +1,7 @@
 // Admin form to create/edit/archive a rehearsal call.
 
+import { SHOW } from "../config";
+
 export function EditCallModal({ ctx }) {
   const { actorList, callTypes, isEditingCall, setIsEditingCall, editCallData, setEditCallData, isCustomTypeMode, setIsCustomTypeMode, callModalPerformerFilter, setCallModalPerformerFilter, toggleCalledRole, selectAllGroup, clearAllRoles, modalFilteredActors, saveCall } = ctx;
 
@@ -7,7 +9,7 @@ export function EditCallModal({ ctx }) {
     <>
       {isEditingCall && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass-card max-w-2xl w-full p-6 rounded-3xl border border-cyan-500/50 shadow-2xl my-8">
+          <div className="glass-card max-w-2xl w-full p-6 rounded-3xl border border-primary-500/50 shadow-2xl my-8">
             <div className="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-4">
               <h3 className="text-lg font-bold font-cinzel text-white">
                 {editCallData.id ? 'Publish / Edit Rehearsal Call' : 'New Rehearsal Call'}
@@ -46,7 +48,7 @@ export function EditCallModal({ ctx }) {
                     <button
                       type="button"
                       onClick={() => setIsCustomTypeMode(!isCustomTypeMode)}
-                      className="text-[11px] text-cyan-400 hover:underline"
+                      className="text-[11px] text-primary-400 hover:underline"
                     >
                       {isCustomTypeMode ? "← Choose from list" : "+ Custom Call Type"}
                     </button>
@@ -59,7 +61,7 @@ export function EditCallModal({ ctx }) {
                       value={editCallData.customType}
                       onChange={(e) => setEditCallData({...editCallData, customType: e.target.value})}
                       placeholder="Type custom call category"
-                      className="w-full bg-slate-900 border border-cyan-500 rounded-xl p-2.5 text-cyan-200 font-semibold"
+                      className="w-full bg-slate-900 border border-primary-500 rounded-xl p-2.5 text-primary-200 font-semibold"
                     />
                   ) : (
                     <select 
@@ -102,7 +104,7 @@ export function EditCallModal({ ctx }) {
               <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
                   <div>
-                    <label className="block text-cyan-300 font-bold text-sm">Select Performers Called</label>
+                    <label className="block text-primary-300 font-bold text-sm">Select Performers Called</label>
                     <p className="text-[11px] text-slate-400">Select performers individually or by group</p>
                   </div>
 
@@ -110,14 +112,14 @@ export function EditCallModal({ ctx }) {
                     <button
                       type="button"
                       onClick={() => selectAllGroup('FULL_COMPANY')}
-                      className="bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-[10px] font-bold px-2 py-1 rounded border border-cyan-800 transition"
+                      className="bg-primary-950 hover:bg-primary-900 text-primary-300 text-[10px] font-bold px-2 py-1 rounded border border-primary-800 transition"
                     >
                       + Full Company ({actorList.length})
                     </button>
                     <button
                       type="button"
                       onClick={() => selectAllGroup('ALL_PRINCIPALS')}
-                      className="bg-sky-950 hover:bg-sky-900 text-sky-300 text-[10px] font-bold px-2 py-1 rounded border border-sky-800 transition"
+                      className="bg-accent-950 hover:bg-accent-900 text-accent-300 text-[10px] font-bold px-2 py-1 rounded border border-accent-800 transition"
                     >
                       + Principals
                     </button>
@@ -144,7 +146,7 @@ export function EditCallModal({ ctx }) {
                     placeholder="Search cast by performer or character name..."
                     value={callModalPerformerFilter}
                     onChange={(e) => setCallModalPerformerFilter(e.target.value)}
-                    className="w-full bg-slate-900/90 border border-slate-700 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+                    className="w-full bg-slate-900/90 border border-slate-700 focus:border-primary-400 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
                   />
                   {callModalPerformerFilter && (
                     <button 
@@ -174,8 +176,8 @@ export function EditCallModal({ ctx }) {
                           onClick={() => toggleCalledRole(performerTag)}
                           className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
                             isSelected
-                              ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
-                              : 'bg-slate-800 text-cyan-300 hover:bg-slate-700'
+                              ? 'bg-primary-500 text-slate-950 font-black shadow-md'
+                              : 'bg-slate-800 text-primary-300 hover:bg-slate-700'
                           }`}
                         >
                           {isSelected ? '✓ Called' : '+ Add'}
@@ -193,7 +195,7 @@ export function EditCallModal({ ctx }) {
 
                 <div className="pt-2 border-t border-slate-800 text-xs flex items-center justify-between">
                   <span className="text-slate-400">
-                    Currently Called: <strong className="text-cyan-200">{editCallData.calledRoles.length}</strong> selected
+                    Currently Called: <strong className="text-primary-200">{editCallData.calledRoles.length}</strong> selected
                   </span>
                   {callModalPerformerFilter && (
                     <span className="text-[11px] text-slate-500">
@@ -211,7 +213,7 @@ export function EditCallModal({ ctx }) {
                   type="text"
                   value={editCallData.focusScenes}
                   onChange={(e) => setEditCallData({...editCallData, focusScenes: e.target.value})}
-                  placeholder='e.g., Scene 4: "In Summer", Act 1 Harmonies'
+                  placeholder={SHOW.focusScenesPlaceholder}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
                 />
               </div>
@@ -240,7 +242,7 @@ export function EditCallModal({ ctx }) {
                   type="checkbox"
                   checked={Boolean(editCallData.isArchived)}
                   onChange={(e) => setEditCallData({...editCallData, isArchived: e.target.checked})}
-                  className="w-5 h-5 rounded border-slate-700 text-cyan-500 focus:ring-cyan-400 bg-slate-900"
+                  className="w-5 h-5 rounded border-slate-700 text-primary-500 focus:ring-primary-400 bg-slate-900"
                 />
               </div>
 
@@ -253,7 +255,7 @@ export function EditCallModal({ ctx }) {
                 </button>
                 <button 
                   type="submit"
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-2 rounded-xl transition shadow-lg shadow-cyan-500/20">
+                  className="bg-primary-500 hover:bg-primary-400 text-slate-950 font-black px-5 py-2 rounded-xl transition shadow-lg shadow-primary-500/20">
                   Publish to Call Board
                 </button>
               </div>

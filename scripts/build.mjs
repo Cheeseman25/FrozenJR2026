@@ -9,16 +9,21 @@
 //   node scripts/build.mjs --cdn-css
 //       Preview build that skips the Tailwind CLI and uses the Tailwind CDN script
 //       instead (only for testing where npm isn't available).
+//
+// Show-specific values (title, icon, analytics, languages, colors) come from
+// show/show.config.js.
 
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const dist = path.join(root, "dist");
 const cdnCss = process.argv.includes("--cdn-css");
+const SHOW = createRequire(import.meta.url)(path.join(root, "show/show.config.js"));
 
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(path.join(dist, "assets"), { recursive: true });
@@ -50,10 +55,11 @@ if (cdnCss) {
   const custom = fs.readFileSync(path.join(root, "src/styles.css"), "utf8")
     .replace(/^@tailwind .*;$/gm, "")
     .trim();
-  const cfg = fs.readFileSync(path.join(root, "src/tailwind-cdn-config.js"), "utf8");
+  const colors = { primary: SHOW.theme.primary, accent: SHOW.theme.accent, page: SHOW.theme.pageGradient };
   stylesTag =
-    `<script src="https://cdn.tailwindcss.com"></script>\n  <script>\n${cfg}\n  </script>\n` +
-    `  <style>\n${custom}\n  </style>`;
+    `<script src="https://cdn.tailwindcss.com/3.4.17"></script>\n` +
+    `  <script>tailwind.config = { theme: { extend: { colors: ${JSON.stringify(colors)} } } };</script>\n` +
+    `  <style type="text/tailwindcss">\n${custom}\n  </style>`;
 } else {
   const tmp = path.join(dist, "styles.tmp.css");
   execFileSync(
@@ -68,17 +74,43 @@ if (cdnCss) {
   stylesTag = `<link rel="stylesheet" href="assets/${cssName}" />`;
 }
 
-// 3. HTML shell
+// 3. HTML shell, filled in from the show settings
+const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const analytics = SHOW.analyticsId
+  ? `<!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=${SHOW.analyticsId}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '${SHOW.analyticsId}');
+  </script>`
+  : "";
+const fields = {
+  pageTitle: esc(SHOW.pageTitle),
+  icon: esc(SHOW.icon),
+  siteLanguage: SHOW.languages[0].code,
+  languageCodes: SHOW.languages.map((l) => l.code).join(","),
+};
 let html = fs.readFileSync(path.join(root, "src/index.html"), "utf8");
 html = html
+  .replace(/\{\{(\w+)\}\}/g, (m, key) => {
+    if (!(key in fields)) throw new Error(`unknown placeholder ${m} in index.html`);
+    return fields[key];
+  })
+  .replace("<!--ANALYTICS-->", analytics)
   .replace("<!--TAILWIND-->", "")
   .replace("<!--STYLES-->", stylesTag)
   .replace("<!--APP-->", `<script src="assets/${jsName}"></script>`);
-if (/<!--(TAILWIND|STYLES|APP)-->/.test(html)) throw new Error("unreplaced marker in index.html");
+if (/<!--(ANALYTICS|TAILWIND|STYLES|APP)-->/.test(html)) throw new Error("unreplaced marker in index.html");
 fs.writeFileSync(path.join(dist, "index.html"), html);
 
-// 4. Static files served alongside the page
-fs.cpSync(path.join(root, "music"), path.join(dist, "music"), { recursive: true });
+// 4. Static files served alongside the page: everything in public/ is copied as-is.
+for (const dir of ["public", "music"]) {
+  if (fs.existsSync(path.join(root, dir))) {
+    fs.cpSync(path.join(root, dir), dir === "public" ? dist : path.join(dist, dir), { recursive: true });
+  }
+}
 fs.writeFileSync(path.join(dist, ".nojekyll"), "");
 
 const kb = (p) => (fs.statSync(p).size / 1024).toFixed(1) + " KB";

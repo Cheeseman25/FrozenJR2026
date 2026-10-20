@@ -13,7 +13,7 @@ export function renderWithLinks(text) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-cyan-300 hover:text-cyan-100 underline decoration-cyan-400 font-semibold break-all inline-flex items-center gap-0.5"
+          className="text-primary-300 hover:text-primary-100 underline decoration-primary-400 font-semibold break-all inline-flex items-center gap-0.5"
           onClick={(e) => e.stopPropagation()}
         >
           <span>{part}</span>

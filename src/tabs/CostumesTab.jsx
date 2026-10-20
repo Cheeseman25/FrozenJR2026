@@ -7,9 +7,9 @@ export function CostumesTab({ ctx }) {
     <>
       {activeTab === 'costumes' && (
         <div className="space-y-6">
-          <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-cyan-400">
+          <div className="glass-card p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-l-primary-400">
             <div>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-full border border-cyan-800">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-primary-400 bg-primary-950 px-2.5 py-1 rounded-full border border-primary-800">
                 Wardrobe & Costumes
               </span>
               <h3 className="text-xl font-bold font-cinzel text-white mt-1.5">Costume Plot & Base Layer Checklist</h3>
@@ -19,8 +19,8 @@ export function CostumesTab({ ctx }) {
             </div>
           </div>
 
-          <div className="glass-card p-12 text-center rounded-3xl border border-cyan-500/20">
-            <div className="w-16 h-16 bg-cyan-950 border border-cyan-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
+          <div className="glass-card p-12 text-center rounded-3xl border border-primary-500/20">
+            <div className="w-16 h-16 bg-primary-950 border border-primary-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
               👗
             </div>
             <h3 className="text-xl font-bold font-cinzel text-white">Costume Breakdown Coming Soon</h3>
