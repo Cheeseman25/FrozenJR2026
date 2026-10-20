@@ -52,9 +52,7 @@ fs.writeFileSync(path.join(dist, "assets", jsName), jsCode);
 // 2. CSS
 let stylesTag;
 if (cdnCss) {
-  const custom = fs.readFileSync(path.join(root, "src/styles.css"), "utf8")
-    .replace(/^@tailwind .*;$/gm, "")
-    .trim();
+  const custom = fs.readFileSync(path.join(root, "src/styles.css"), "utf8").trim();
   const colors = { primary: SHOW.theme.primary, accent: SHOW.theme.accent, page: SHOW.theme.pageGradient };
   stylesTag =
     `<script src="https://cdn.tailwindcss.com/3.4.17"></script>\n` +

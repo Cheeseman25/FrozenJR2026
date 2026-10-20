@@ -44,11 +44,7 @@
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script>tailwind.config = { theme: { extend: { colors: {"primary":{"50":"#ecfeff","100":"#cffafe","200":"#a5f3fc","300":"#67e8f9","400":"#22d3ee","500":"#06b6d4","600":"#0891b2","700":"#0e7490","800":"#155e75","900":"#164e63","950":"#083344"},"accent":{"50":"#f0f9ff","100":"#e0f2fe","200":"#bae6fd","300":"#7dd3fc","400":"#38bdf8","500":"#0ea5e9","600":"#0284c7","700":"#0369a1","800":"#075985","900":"#0c4a6e","950":"#082f49"},"page":{"top":"#0c4a6e","bottom":"#031828"}} } } };</script>
   <style type="text/tailwindcss">
-/* Tailwind layers + custom site styles. Colors come from the show theme via theme(). */
-
-
-
-
+/* Custom site styles + Tailwind. Colors come from the show theme via theme(). */
 body {
   font-family: 'Nunito', sans-serif;
   background: radial-gradient(circle at 50% 0%, theme('colors.page.top') 0%, theme('colors.page.bottom') 100%);
@@ -120,6 +116,12 @@ body {
   left: -9999px;
   visibility: hidden;
 }
+
+/* Tailwind goes AFTER the custom styles on purpose: when an element has both a
+   custom class (e.g. .glass-card) and a Tailwind utility, the utility wins. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
   </style>
 </head>
 <body class="selection:bg-primary-500 selection:text-white pb-20">

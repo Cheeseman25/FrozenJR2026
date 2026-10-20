@@ -1,8 +1,4 @@
-/* Tailwind layers + custom site styles. Colors come from the show theme via theme(). */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+/* Custom site styles + Tailwind. Colors come from the show theme via theme(). */
 body {
   font-family: 'Nunito', sans-serif;
   background: radial-gradient(circle at 50% 0%, theme('colors.page.top') 0%, theme('colors.page.bottom') 100%);
@@ -74,3 +70,9 @@ body {
   left: -9999px;
   visibility: hidden;
 }
+
+/* Tailwind goes AFTER the custom styles on purpose: when an element has both a
+   custom class (e.g. .glass-card) and a Tailwind utility, the utility wins. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
