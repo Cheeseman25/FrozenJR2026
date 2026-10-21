@@ -111,12 +111,17 @@ function buildDescription_(reh) {
   return lines.join("\n");
 }
 
-/** Parses "2026-11-03" + "6:30 PM" (or "18:30") into a Date in the script's timezone. */
+/**
+ * Parses "2026-11-03" + a time into a Date in the script's time zone.
+ * Accepts "6:30 PM", "6:30pm", "18:30", "6 PM", or a full Date string that
+ * Google Sheets sometimes returns for time cells ("Sat Dec 30 1899 18:30:00 GMT-0500 ...").
+ */
 function buildStart_(dateStr, timeStr) {
   var m = String(dateStr || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
-  var t = String(timeStr || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  var raw = String(timeStr || "").trim();
   var hh = 9, mm = 0;   // default 9:00 if no time given
+  var t = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
   if (t) {
     hh = parseInt(t[1], 10);
     mm = t[2] ? parseInt(t[2], 10) : 0;
@@ -125,6 +130,9 @@ function buildStart_(dateStr, timeStr) {
       if (ap === "pm" && hh < 12) hh += 12;
       if (ap === "am" && hh === 12) hh = 0;
     }
+  } else if (/\d{4}\s+\d{1,2}:\d{2}/.test(raw)) {
+    var d0 = new Date(raw);
+    if (!isNaN(d0.getTime())) { hh = d0.getHours(); mm = d0.getMinutes(); }
   }
   return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), hh, mm, 0);
 }
