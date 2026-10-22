@@ -1,5 +1,6 @@
 /**
- * calendarSync.gs  (v2, STAGED; not deployed or tested in Apps Script yet)
+ * calendarSync.gs  VERSION 2 (2026-10-21, branch calendar-sync)
+ * STAGED; not deployed or tested in Apps Script yet.
  *
  * Writes call board details into EXISTING calendar events.
  *   - Each call is matched to the event on the same date whose time window overlaps it.
