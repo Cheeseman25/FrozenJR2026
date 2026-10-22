@@ -79,14 +79,27 @@ export function EditCallModal({ ctx }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">Time Block</label>
-                  <input 
-                    type="text"
-                    value={editCallData.time}
-                    onChange={(e) => setEditCallData({...editCallData, time: e.target.value})}
-                    placeholder="e.g., 5:30 PM - 8:00 PM"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
-                  />
+                  <label className="block text-slate-300 font-bold mb-1">Start / End</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="time"
+                      step="300"
+                      required
+                      aria-label="Start time"
+                      value={editCallData.startTime || ''}
+                      onChange={(e) => setEditCallData({...editCallData, startTime: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                    />
+                    <input
+                      type="time"
+                      step="300"
+                      required
+                      aria-label="End time"
+                      value={editCallData.endTime || ''}
+                      onChange={(e) => setEditCallData({...editCallData, endTime: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">Room / Location</label>
