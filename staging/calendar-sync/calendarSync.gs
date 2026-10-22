@@ -1,5 +1,5 @@
 /**
- * calendarSync.gs  VERSION 2 (2026-10-21, branch calendar-sync)
+ * calendarSync.gs  VERSION 3 (2026-10-21, branch calendar-sync)
  * STAGED; not deployed or tested in Apps Script yet.
  *
  * Writes call board details into EXISTING calendar events.
@@ -102,7 +102,8 @@ function syncDate_(dateStr) {
 }
 
 function callWindow_(r, dayMidnight) {
-  var t = parseTimeRange_(r.time);
+  // v3 sheet has StartTime and EndTime columns; fall back to a combined time string.
+  var t = parseTimeRange_(r.startTime && r.endTime ? r.startTime + " - " + r.endTime : r.time);
   if (!t) return null;
   var start = new Date(dayMidnight.getTime() + t.startMin * 60000);
   var end = new Date(dayMidnight.getTime() + t.endMin * 60000);
