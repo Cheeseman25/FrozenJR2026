@@ -76,3 +76,21 @@ body {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Date and time pickers on the dark admin form: make the browser's own
+   calendar and clock icons visible (they are dark by default). */
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  opacity: 0.9;
+  cursor: pointer;
+  padding: 2px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
