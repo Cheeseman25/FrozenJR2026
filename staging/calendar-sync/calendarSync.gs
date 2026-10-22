@@ -1,138 +1,221 @@
 /**
- * calendarSync.gs  (STAGED DRAFT, not yet deployed or tested)
+ * calendarSync.gs  (v2, STAGED; not deployed or tested in Apps Script yet)
  *
- * Mirrors each rehearsal call on the Rehearsals sheet into a single event
- * on the public show calendar. Matched by an event tag holding the
- * rehearsal ID, so title/time edits don't create duplicates.
+ * Writes call board details into EXISTING calendar events.
+ *   - Each call is matched to the event on the same date whose time window overlaps it.
+ *   - Several calls can land on one event; each gets its own labeled section.
+ *   - Sections are rebuilt from the Sheet every sync, so nothing is duplicated or stale.
+ *   - Event times and titles are never changed.
+ *   - A call with no matching event is logged, NOT created (create-on-miss comes later,
+ *     with the in-app prompt).
+ *   - A time that can't be read is logged and skipped. No guessing.
  *
- * Privacy: only CHARACTER names go into the event description.
- * Called performers are stored as "Name (Character)"; only the character
- * part is copied. Notes are NOT posted unless SYNC_INCLUDE_NOTES is true.
+ * Privacy: only CHARACTER names are posted. Called performers are stored as
+ * "Name (Character)" and only the character part is used. Notes stay off unless
+ * SYNC_INCLUDE_NOTES is true.
  *
- * Hook points (see README.md in this folder):
- *   - saveRehearsalCall(item)          -> call syncRehearsalToCalendar(rowObject)
- *   - setRehearsalArchivedStatus(...)  -> call syncRehearsalById(id)
+ * Hook points (Code.gs):
+ *   saveRehearsalCall        -> syncRehearsalById(rowData[0])
+ *   setRehearsalArchivedStatus -> syncRehearsalById(id)
  */
 
-var SYNC_TAG_KEY = "rehearsalId";
-var SYNC_INCLUDE_NOTES = false;      // keep false: calendar is public
-var SYNC_DEFAULT_DURATION_MIN = 60;  // used when the call has no end time
+var SYNC_INCLUDE_NOTES = false;
+var SYNC_DEFAULT_DURATION_MIN = 60;   // used when a call gives only a start time
+var SYNC_MARKER = "[Call board: updates automatically]";
 
-/**
- * Entry point used by the save path. Wrapped so a calendar problem never
- * fails the save itself; errors are logged for the Apps Script execution log.
- */
-function syncRehearsalToCalendar(reh) {
+// ---------- entry points ----------
+
+/** Re-sync the date of one call. Safe to call from the save/archive hooks. */
+function syncRehearsalById(id) {
+  var hit = getRehearsalCalls().filter(function(r) { return String(r.id) === String(id); });
+  if (hit.length === 0) return { status: "error", message: "call not found: " + id };
+  return syncDate_(hit[0].date);
+}
+
+/** Manual run: re-syncs every date on the call board. Run once after deploying. */
+function syncAllRehearsalsToCalendar() {
+  var dates = {};
+  getRehearsalCalls().forEach(function(r) { if (r.date) dates[r.date] = true; });
+  var lines = Object.keys(dates).sort().map(function(d) {
+    var res = syncDate_(d);
+    return d + ": " + res.status + (res.report ? "\n  " + res.report.join("\n  ") : (res.message ? " " + res.message : ""));
+  });
+  Logger.log(lines.join("\n"));
+  return lines;
+}
+
+// ---------- core ----------
+
+function syncDate_(dateStr) {
   try {
     var cal = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
     if (!cal) throw new Error("Calendar not found: " + CONFIG.CALENDAR_ID);
 
-    var event = findSyncedEvent_(cal, reh.id, reh.date);
+    var day = dateAtMidnight_(dateStr);
+    if (!day) return { status: "skipped", message: "bad date " + dateStr };
+    var dayEnd = new Date(day.getTime() + 86400000);
 
-    if (reh.isArchived) {
-      if (event) markCancelled_(event);
-      return { status: "success", action: event ? "cancelled" : "none" };
-    }
+    var report = [];
+    var windows = [];
+    getRehearsalCalls().forEach(function(r) {
+      if (r.date !== dateStr) return;
+      var w = callWindow_(r, day);
+      if (w) windows.push(w);
+      else report.push("SKIPPED, unreadable time: " + r.id + " \"" + r.title + "\" time=\"" + r.time + "\"");
+    });
 
-    var start = buildStart_(reh.date, reh.time);
-    if (!start) {
-      Logger.log("calendarSync: could not parse date/time for " + reh.id + " (" + reh.date + " " + reh.time + ")");
-      return { status: "skipped", reason: "unparseable date/time" };
-    }
-    var end = new Date(start.getTime() + SYNC_DEFAULT_DURATION_MIN * 60000);
-    var title = reh.title || "Rehearsal Call";
-    var opts = { location: reh.location || "", description: buildDescription_(reh) };
+    var active = windows.filter(function(w) { return !w.call.isArchived; });
+    var events = cal.getEvents(day, dayEnd);
 
-    if (event) {
-      event.setTitle(title);
-      event.setTime(start, end);
-      event.setLocation(opts.location);
-      event.setDescription(opts.description);
-      return { status: "success", action: "updated" };
-    }
+    events.forEach(function(ev) {
+      var evStart = ev.getStartTime(), evEnd = ev.getEndTime();
+      var mine = active.filter(function(w) { return overlaps_(w.start, w.end, evStart, evEnd); });
+      var desc = ev.getDescription() || "";
 
-    var created = cal.createEvent(title, start, end, opts);
-    created.setTag(SYNC_TAG_KEY, String(reh.id));
-    return { status: "success", action: "created" };
+      if (mine.length) {
+        mine.sort(function(a, b) { return a.start - b.start; });
+        ev.setDescription(buildDescription_(mine));
+        var locs = uniq_(mine.map(function(w) { return w.call.location; }).filter(Boolean));
+        if (locs.length === 1) ev.setLocation(locs[0]);
+        report.push("updated: \"" + ev.getTitle() + "\" " + fmtTime_(evStart) + "–" + fmtTime_(evEnd) +
+                    " with " + mine.length + " call(s)");
+      } else if (desc.indexOf(SYNC_MARKER) === 0) {
+        // Previously filled by us, but no active call matches any more (archived or moved):
+        // clear our section. Events without our marker are never touched.
+        ev.setDescription("");
+        report.push("cleared stale call board text: \"" + ev.getTitle() + "\"");
+      }
+    });
+
+    active.forEach(function(w) {
+      var hit = events.some(function(ev) { return overlaps_(w.start, w.end, ev.getStartTime(), ev.getEndTime()); });
+      if (!hit) report.push("NO MATCHING EVENT, not created: " + w.call.id + " \"" + w.call.title +
+                            "\" " + fmtTime_(w.start) + "–" + fmtTime_(w.end));
+    });
+
+    return { status: "success", report: report };
   } catch (err) {
-    Logger.log("calendarSync error for " + (reh && reh.id) + ": " + err);
+    Logger.log("calendarSync error for " + dateStr + ": " + err);
     return { status: "error", message: String(err) };
   }
 }
 
-/** Re-sync one call by ID by reading its row from the sheet. */
-function syncRehearsalById(id) {
-  var rows = getRehearsalCalls().filter(function(r) { return String(r.id) === String(id); });
-  if (rows.length === 0) return { status: "error", message: "not found" };
-  return syncRehearsalToCalendar(rows[0]);
+function callWindow_(r, dayMidnight) {
+  var t = parseTimeRange_(r.time);
+  if (!t) return null;
+  var start = new Date(dayMidnight.getTime() + t.startMin * 60000);
+  var end = new Date(dayMidnight.getTime() + t.endMin * 60000);
+  return { call: r, start: start, end: end };
 }
 
-/** Manual backfill: run once from the Apps Script editor after deploying. */
-function syncAllRehearsalsToCalendar() {
-  var results = getRehearsalCalls().map(function(r) {
-    return r.id + ": " + JSON.stringify(syncRehearsalToCalendar(r));
+function buildDescription_(windows) {
+  var lines = [SYNC_MARKER];
+  windows.forEach(function(w) {
+    var c = w.call;
+    lines.push("");
+    lines.push(fmtTime_(w.start) + "–" + fmtTime_(w.end) + "  " + cleanTitle_(c.title));
+    var roles = parseCommaList(c.calledRoles).map(function(entry) {
+      var m = String(entry).match(/\(([^)]+)\)\s*$/);
+      return m ? m[1].trim() : null;   // never post the performer name
+    }).filter(Boolean);
+    roles = uniq_(roles);
+    if (roles.length) lines.push("Characters called: " + roles.join(", "));
+    var focus = parseCommaList(c.focusScenes);
+    if (focus.length) lines.push("Focus: " + focus.join(", "));
+    if (SYNC_INCLUDE_NOTES && c.notes) lines.push(String(c.notes));
   });
-  Logger.log(results.join("\n"));
-  return results;
+  return lines.join("\n");
+}
+
+// ---------- time parsing ----------
+
+/**
+ * Accepts: "5:30PM - 6:00PM", "5:30-6:15 pm", "4pm-6pm", "4:00 PM", "18:30",
+ * "4:00-6:00 pm", "6 PM", and Sheets' full Date strings ("Sat Dec 30 1899 18:30:00 GMT-0500 ...").
+ * Returns { startMin, endMin } minutes after midnight, or null if unreadable.
+ * If the start has no am/pm, it takes the end's ("5:30-6:15 pm" = 5:30 PM).
+ */
+function parseTimeRange_(s) {
+  var raw = String(s == null ? "" : s).replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+
+  // Sheets date-cell form: take clock time from it
+  if (/\d{4}\s+\d{1,2}:\d{2}/.test(raw) && /GMT|\(/.test(raw)) {
+    var d0 = new Date(raw);
+    if (isNaN(d0.getTime())) return null;
+    var sm = d0.getHours() * 60 + d0.getMinutes();
+    return { startMin: sm, endMin: sm + SYNC_DEFAULT_DURATION_MIN };
+  }
+
+  var parts = raw.split(/\s*(?:-|\bto\b)\s*/i);
+  if (parts.length > 2) return null;
+
+  var re = /^(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?$|^(\d{1,2})(?::(\d{2}))?$/i;
+  var parsed = parts.map(function(p) {
+    var m = p.trim().match(re);
+    if (!m) return null;
+    if (m[1] !== undefined) return { h: +m[1], min: m[2] ? +m[2] : 0, mer: m[3].toLowerCase() };
+    return { h: +m[4], min: m[5] ? +m[5] : 0, mer: null };
+  });
+  if (parsed.some(function(x) { return x === null; })) return null;
+
+  var first = parsed[0], last = parsed[parsed.length - 1];
+  if (first.min > 59 || last.min > 59) return null;
+
+  var endMer = last.mer;
+  var startMer = first.mer || (parsed.length === 2 ? endMer : null);
+
+  var startMin = to24Min_(first.h, first.min, startMer);
+  if (startMin === null) return null;
+
+  var endMin;
+  if (parsed.length === 2) {
+    endMin = to24Min_(last.h, last.min, endMer || startMer);
+    if (endMin === null) return null;
+    // "11-1 pm" case: start inherited pm but is later than end, so it must be am
+    if (!first.mer && startMin >= endMin && startMer) startMin -= 720;
+    if (endMin <= startMin) return null;
+  } else {
+    endMin = startMin + SYNC_DEFAULT_DURATION_MIN;
+  }
+  if (startMin < 0 || endMin > 24 * 60) return null;
+  return { startMin: startMin, endMin: endMin };
+}
+
+function to24Min_(h, min, mer) {
+  if (mer) {
+    if (h < 1 || h > 12) return null;
+    if (mer === "p" && h < 12) h += 12;
+    if (mer === "a" && h === 12) h = 0;
+  } else if (h > 23) {
+    return null;
+  }
+  return h * 60 + min;
 }
 
 // ---------- helpers ----------
 
-function findSyncedEvent_(cal, id, dateStr) {
-  // Search a window around the call date (tags can't be queried directly).
-  var d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) d = new Date();
-  var from = new Date(d.getTime() - 2 * 86400000);
-  var to = new Date(d.getTime() + 3 * 86400000);
-  var events = cal.getEvents(from, to);
-  for (var i = 0; i < events.length; i++) {
-    if (events[i].getTag(SYNC_TAG_KEY) === String(id)) return events[i];
-  }
-  return null;
-}
-
-function markCancelled_(event) {
-  var t = event.getTitle();
-  if (t.indexOf("CANCELLED: ") !== 0) event.setTitle("CANCELLED: " + t);
-}
-
-/** Character names only, e.g. "Elsa, Anna, Olaf". Parses "Name (Character)". */
-function buildDescription_(reh) {
-  var lines = [];
-  var roles = parseCommaList(reh.calledRoles).map(function(entry) {
-    var m = String(entry).match(/\(([^)]+)\)\s*$/);
-    return m ? m[1].trim() : null;   // no "(Character)" -> skip, never post the performer name
-  }).filter(Boolean);
-  // de-duplicate, keep order
-  roles = roles.filter(function(v, i, a) { return a.indexOf(v) === i; });
-  if (roles.length) lines.push("Characters called: " + roles.join(", "));
-  if (reh.focusScenes && String(reh.focusScenes).trim()) lines.push("Focus: " + parseCommaList(reh.focusScenes).join(", "));
-  if (SYNC_INCLUDE_NOTES && reh.notes) lines.push(String(reh.notes));
-  return lines.join("\n");
-}
-
-/**
- * Parses "2026-11-03" + a time into a Date in the script's time zone.
- * Accepts "6:30 PM", "6:30pm", "18:30", "6 PM", or a full Date string that
- * Google Sheets sometimes returns for time cells ("Sat Dec 30 1899 18:30:00 GMT-0500 ...").
- */
-function buildStart_(dateStr, timeStr) {
+function dateAtMidnight_(dateStr) {
   var m = String(dateStr || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
-  var raw = String(timeStr || "").trim();
-  var hh = 9, mm = 0;   // default 9:00 if no time given
-  var t = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-  if (t) {
-    hh = parseInt(t[1], 10);
-    mm = t[2] ? parseInt(t[2], 10) : 0;
-    if (t[3]) {
-      var ap = t[3].toLowerCase();
-      if (ap === "pm" && hh < 12) hh += 12;
-      if (ap === "am" && hh === 12) hh = 0;
-    }
-  } else if (/\d{4}\s+\d{1,2}:\d{2}/.test(raw)) {
-    var d0 = new Date(raw);
-    if (!isNaN(d0.getTime())) { hh = d0.getHours(); mm = d0.getMinutes(); }
-  }
-  return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), hh, mm, 0);
+  return new Date(+m[1], +m[2] - 1, +m[3], 0, 0, 0);
+}
+
+function overlaps_(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && aEnd > bStart;
+}
+
+function fmtTime_(d) {
+  var h = d.getHours(), m = d.getMinutes();
+  var ap = h >= 12 ? "PM" : "AM";
+  var h12 = h % 12 === 0 ? 12 : h % 12;
+  return h12 + (m ? ":" + ("0" + m).slice(-2) : "") + " " + ap;
+}
+
+function cleanTitle_(t) {
+  return String(t || "Rehearsal").replace(/\s+/g, " ").trim();
+}
+
+function uniq_(arr) {
+  return arr.filter(function(v, i, a) { return a.indexOf(v) === i; });
 }
