@@ -1,6 +1,7 @@
 // Admin form to create/edit/archive a rehearsal call.
 
 import { SHOW } from "../config";
+import { PickerInput } from "../components/PickerInput";
 
 export function EditCallModal({ ctx }) {
   const { actorList, callTypes, isEditingCall, setIsEditingCall, editCallData, setEditCallData, isCustomTypeMode, setIsCustomTypeMode, callModalPerformerFilter, setCallModalPerformerFilter, toggleCalledRole, selectAllGroup, clearAllRoles, modalFilteredActors, saveCall } = ctx;
@@ -33,7 +34,8 @@ export function EditCallModal({ ctx }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">Rehearsal Date</label>
-                  <input 
+                  <PickerInput 
+                    kind="date" 
                     type="date"
                     required
                     value={editCallData.date}
@@ -81,7 +83,8 @@ export function EditCallModal({ ctx }) {
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">Start / End</label>
                   <div className="grid grid-cols-2 gap-2">
-                    <input
+                    <PickerInput
+                      kind="time"
                       type="time"
                       step="300"
                       required
@@ -90,7 +93,8 @@ export function EditCallModal({ ctx }) {
                       onChange={(e) => setEditCallData({...editCallData, startTime: e.target.value})}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
                     />
-                    <input
+                    <PickerInput
+                      kind="time"
                       type="time"
                       step="300"
                       required
