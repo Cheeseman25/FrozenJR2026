@@ -1,7 +1,7 @@
 # FrozenJR2026 — Project Primer
 
 > Read this first at the start of any session on this project. It is the working context for Claude.
-> Last updated: 2026-10-21. Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
+> Last updated: 2026-10-22. Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: Choreography Vault thumbnail picker that lists the YouTube playlist automatically (2026-10-22); call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
 > The engine also lives in the template repo `Cheeseman25/ShowPortalTemplate`; future shows are created from it. Engine fixes go there too.
 
 ## What this is
@@ -184,6 +184,7 @@ Rehearsals sheet columns: `ID, Title, Date, StartTime, EndTime, Location, Type, 
 ## Known issues, risks and gotchas
 
 - **Admin PIN is in the Apps Script.** `DEFAULT_ADMIN_PIN` is hardcoded. The repo is public, so the local copy (`apps-script/`) is git-ignored. Never commit it or paste the PIN into tracked files.
+- **YouTube API key is in `show/show.config.js`** (`youtubeApiKey`). The repo is public, so anyone can read it. It is safe only because Google Cloud restricts it to HTTP referrer `https://cheeseman25.github.io/*` and to the YouTube Data API v3. If the key leaks or the restrictions change, rotate it in Google Cloud and update the setting.
 - Auth is a shared PIN, stored in `sessionStorage` and sent with every write. Fine for a call board; not real security.
 - Admin edits update `localStorage` before the backend confirms; a failed save shows an alert but local view may diverge until refresh.
 - Each visitor's `localStorage` caches data; stale-data bugs may be cache, not backend.
