@@ -44,7 +44,7 @@ module.exports = {
   videosPlaylistTitle: "Frozen JR. Choreography & Blocking Videos",
   // YouTube Data API v3 key, restricted to cheeseman25.github.io. Lets the Choreography Vault
   // list playlist entries automatically. "" falls back to the plain playlist embed.
-  youtubeApiKey: "",
+  youtubeApiKey: "AIzaSyDD7kQXbO90lQFFPN2Up8MD_IHgsswPo6s",
   analyticsId: "G-1D8TXY3JM5",          // Google Analytics 4; "" to turn off
 
   // Shown on the music page if the Drive folder can't be loaded. Can be [].
