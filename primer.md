@@ -73,6 +73,8 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 | `calendarId` | Public Google Calendar for the season (also hardcoded in Frozen's Apps Script `CONFIG.CALENDAR_ID`). Calendar sync writes call details into its events. |
 | `musicFolderUrl` | Drive music folder (same ID as Apps Script `MUSIC_ROOT_FOLDER_ID`). |
 | `youtubePlaylistId` | YouTube playlist embedded in the music tab. |
+| `videosPlaylistId` | YouTube playlist for the Choreography Vault. `""` shows "coming soon". |
+| `youtubeApiKey` | YouTube Data API v3 key, restricted to `cheeseman25.github.io`. Lets the Vault list playlist entries automatically. `""` falls back to the plain playlist embed. |
 | `artworkUrl` | MTI hero artwork (hotlinked from mtishows.com). |
 | `company.logoUrl` | Footer logo (raw GitHub URL to `music/` in this repo). |
 | `fallbackTracks` | Single-track fallback if Drive sync fails. |
@@ -91,7 +93,7 @@ Hash-based routing on a single page. `TAB_INFO` is the route table; `getInitialT
 | `#cast` | 🎭 Cast Members | Mystery reveal cast cards |
 | `#costumes` | 👗 Costumes | **Placeholder** ("coming soon"), confirmed empty, no content yet |
 | `#music` | 🎵 Rehearsal Tracks | Drive audio player + YouTube playlist sub-view |
-| `#videos` | 🎬 Choreography Vault | **Placeholder** ("coming soon"), confirmed empty, no content yet |
+| `#videos` | 🎬 Choreography Vault | Thumbnail picker over the choreography YouTube playlist (see section below) |
 | `#calendar` | 🗓️ Master Schedule | Live Google Calendar feed |
 
 Sub-views and overlays (not routed, component state only):
@@ -137,7 +139,13 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Open Drive Folder link, Sync Folder (clears cache and refetches).
 - YouTube Stream sub-view embedding the rehearsal playlist (youtube-nocookie).
 
-### Choreography Vault (`#videos`) — placeholder only.
+### Choreography Vault (`#videos`)
+
+- Lists the choreography playlist (`videosPlaylistId`) through the YouTube Data API (`playlistItems.list`) when the tab opens. New entries added in YouTube appear on the next visit, with no code change.
+- Renders a thumbnail grid. The selected video plays in a youtube-nocookie embed. The first entry plays by default.
+- Pages through up to 500 entries (10 pages x 50). Skips hidden or removed entries and any ID that fails the 11-character check.
+- Falls back to the plain playlist embed when `youtubeApiKey` is blank or the API call fails. Shows "coming soon" when `videosPlaylistId` is blank.
+- Calls the API only while the tab is open, which keeps quota use low.
 
 ### Master Schedule (`#calendar`)
 - Events from Google Calendar (2 weeks back to ~8 months ahead), grouped by month. Currently ~26 events (Oct 2026 – Jan 2027).
