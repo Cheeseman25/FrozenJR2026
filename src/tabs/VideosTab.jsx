@@ -62,15 +62,16 @@ export function VideosTab({ ctx }) {
   const [videos, setVideos] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState("");
 
+  // Set once the load starts, so the fetch runs once per visit and is never cancelled by a re-render.
+  const startedRef = React.useRef(false);
+
   // Load the playlist only when this tab is open, so quota is spent only when someone looks at it.
   React.useEffect(() => {
-    if (activeTab !== "videos" || !YOUTUBE_CHOREO_PLAYLIST_ID || !YOUTUBE_API_KEY) return;
-    if (status !== "idle") return;
+    if (activeTab !== "videos" || startedRef.current || !YOUTUBE_CHOREO_PLAYLIST_ID || !YOUTUBE_API_KEY) return;
+    startedRef.current = true;
 
-    let cancelled = false;
     setStatus("loading");
     fetchPlaylistVideos(YOUTUBE_CHOREO_PLAYLIST_ID, YOUTUBE_API_KEY).then((list) => {
-      if (cancelled) return;
       if (list === null) {
         setStatus("failed");
         return;
@@ -79,8 +80,7 @@ export function VideosTab({ ctx }) {
       setSelectedId(list.length ? list[0].id : "");
       setStatus("ready");
     });
-    return () => { cancelled = true; };
-  }, [activeTab, status]);
+  }, [activeTab]);
 
   if (activeTab !== "videos") return null;
 
