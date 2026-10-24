@@ -31,7 +31,7 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 
 **Build:** source lives in `src/`. `npm run build` (scripts/build.mjs) bundles the JSX with esbuild into one minified `assets/app-<hash>.js`, compiles Tailwind v3 + `src/styles.css` into `assets/styles-<hash>.css`, and writes `dist/index.html`. React 18 / ReactDOM still load as global UMD scripts from unpkg; canvas-confetti, Google Translate, GA4 and Google Fonts load from CDNs. No Babel and no Tailwind CDN in the browser.
 
-**Deploy:** `.github/workflows/deploy.yml` builds on every push; pushes to `main` deploy `dist/` to GitHub Pages. Requires repo Settings → Pages → Source = "GitHub Actions". Other branches only build (a CI check).
+**Deploy:** `.github/workflows/deploy.yml` builds on every push; pushes to `main` deploy `dist/` to GitHub Pages only while the repo variable `PAGES_DEPLOY` is `true` (otherwise the deploy job is skipped). Requires repo Settings → Pages → Source = "GitHub Actions". Other branches only build (a CI check).
 
 ## Files
 
@@ -55,7 +55,7 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 | `package.json` | Dev dependencies: esbuild, tailwindcss@3. |
 | `.github/workflows/deploy.yml` | Build + deploy to Pages. |
 | `index.html` (root) | **Old single-file version**, kept as a fallback until the Actions deploy is confirmed; delete after switch-over. |
-| `apps-script/Code.gs` | Plain-text copy of the Apps Script backend, **VERSION 4** (header comment says so). **Git-ignored** because it contains the admin PIN. Reference copy only; the live script is edited and deployed at script.google.com. Keep this file in sync whenever the backend changes. |
+| `apps-script/Code.gs` | Plain-text copy of the Apps Script backend, **VERSION 5** (header comment says so; adds the AWS bridge). **Git-ignored** because it contains the admin PIN. Reference copy only; the live script is edited and deployed at script.google.com. Keep this file in sync whenever the backend changes. |
 | `apps-script/calendarSync.gs` | **Calendar sync module, VERSION 4**, git-ignored along with the rest of `apps-script/`. Its source is committed on the `calendar-sync` branch at `staging/calendar-sync/calendarSync.gs` (not on `main`). |
 | `AppScript for Frozen.txt` | Original RTF copy from TextEdit. Superseded by `apps-script/Code.gs`; git-ignored; safe to delete. |
 | `.gitignore` | Keeps `apps-script/` and the RTF copy out of the public repo. |
@@ -230,9 +230,9 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - Git needs **deletion permission** on the folder (lock files). Request it once before the first commit.
 - Commit with clear messages (not "Update index.html"). Pushing over SSH from Claude's shell may be blocked; if so, the user pushes or the remote is switched to HTTPS.
 - Pushing to `main` deploys to GitHub Pages within ~1 minute. Verify at the live URL in the browser pane after pushing.
-- Backend changes: edit `apps-script/Code.gs` and `apps-script/calendarSync.gs`, then the user pastes them into the Apps Script editor (script.google.com) and redeploys as a new version of the existing deployment. Direct deploy via Google's `clasp` CLI is possible but not set up yet.
+- Backend changes: edit `apps-script/Code.gs` and `apps-script/calendarSync.gs`, then the user pastes them into the Apps Script editor (script.google.com) and redeploys as a new version of the existing deployment. `clasp` is installed on the Mac and signed in as the TTS Players Google account, so Claude can push and redeploy directly when asked (script ID `1JpqHQY24utiOUN8tQaQ0lwRKgM6c-Ur3YZI2wE_Zjns-fGqn2b7t8zLu`; keep the same web-app deployment so the `/exec` URL does not change).
 
-## AWS hosting (optional second build)
+## AWS hosting (second site, running side by side)
 
 The same engine can be served from AWS on its own domain with its own call board API, while the GitHub Pages build keeps using Google.
 
@@ -241,3 +241,12 @@ The same engine can be served from AWS on its own domain with its own call board
 - The call board API is `aws/callboard-api/` (Lambda + DynamoDB; see its README). Cast, the calendar and the music folder still come from Apps Script and the Sheet, which the production team edits. Calendar updates for AWS-stored calls go through three bridge actions in the Apps Script (`awsSync`, `awsAttach`, `awsCreate`), protected by a shared secret kept in Parameter Store.
 - Settings: `callBoardUrl` and `videosApiUrl` are optional. Blank means the old behaviour (`backendUrl`, and the browser-side `youtubeApiKey`).
 - The two sites keep separate call lists (Sheet vs DynamoDB). Use one for real changes until the cutover.
+
+### AWS clone: where things are (account 106490371111, Region us-east-2)
+- Site `https://frozen2026.ttsplayershaverhillbradford.com` (Cloudflare DNS-only CNAME to CloudFront `E2CE6WJEO4KPN4`). Private S3 site bucket `frozen2026-ttsplayers-site-106490371111`, deploy bucket `frozen2026-ttsplayers-private-106490371111`.
+- API: Lambda `frozen2026-callboard` (function URL with IAM auth, reached only through CloudFront OAC), DynamoDB `frozen2026-calls` (point-in-time recovery on), same-origin paths `/api/calls` and `/api/videos`.
+- Secrets in SSM SecureStrings `/tts/frozen2026/{admin-pin,sync-secret,youtube-key}`. The YouTube key has no website restriction and is limited to YouTube Data API v3. The old key in this repo's history is burned; delete it in Google Cloud once the Pages site is retired.
+- POSTs through CloudFront must send `x-amz-content-sha256`; `src/lib/callApi.js` does it for relative URLs.
+- Deploy: `npm run build:aws`, upload `dist/` to the site bucket, invalidate CloudFront.
+- New shows: use the template repo's `aws/README.md` and CloudFormation stack (this clone was built by hand).
+- Status: side by side, no cutover yet. Planned cutover: rename this repo to a private name and publish a tiny public repo named `FrozenJR2026` containing only a redirect (making this repo private unpublishes its Pages site on a free plan).
