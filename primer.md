@@ -231,3 +231,13 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - Commit with clear messages (not "Update index.html"). Pushing over SSH from Claude's shell may be blocked; if so, the user pushes or the remote is switched to HTTPS.
 - Pushing to `main` deploys to GitHub Pages within ~1 minute. Verify at the live URL in the browser pane after pushing.
 - Backend changes: edit `apps-script/Code.gs` and `apps-script/calendarSync.gs`, then the user pastes them into the Apps Script editor (script.google.com) and redeploys as a new version of the existing deployment. Direct deploy via Google's `clasp` CLI is possible but not set up yet.
+
+## AWS hosting (optional second build)
+
+The same engine can be served from AWS on its own domain with its own call board API, while the GitHub Pages build keeps using Google.
+
+- `npm run build` is unchanged: `show/show.config.js`, Apps Script for everything, deployed to GitHub Pages from `main`.
+- `npm run build:aws` merges `show/show.aws.config.js` over the settings. The overrides are `callBoardUrl` (call board on `/api/calls`), `videosApiUrl` (playlist on `/api/videos`, so the YouTube key stays on the server), a blank `youtubeApiKey` and a logo hosted with the site. Only the merged result is bundled, so a blanked value is truly absent from the AWS build.
+- The call board API is `aws/callboard-api/` (Lambda + DynamoDB; see its README). Cast, the calendar and the music folder still come from Apps Script and the Sheet, which the production team edits. Calendar updates for AWS-stored calls go through three bridge actions in the Apps Script (`awsSync`, `awsAttach`, `awsCreate`), protected by a shared secret kept in Parameter Store.
+- Settings: `callBoardUrl` and `videosApiUrl` are optional. Blank means the old behaviour (`backendUrl`, and the browser-side `youtubeApiKey`).
+- The two sites keep separate call lists (Sheet vs DynamoDB). Use one for real changes until the cutover.
