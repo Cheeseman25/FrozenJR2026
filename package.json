@@ -3,7 +3,8 @@
   "private": true,
   "description": "Frozen JR. production portal and call board (TTS Players)",
   "scripts": {
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "build:aws": "node scripts/build.mjs --overlay show/show.aws.config.js"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
