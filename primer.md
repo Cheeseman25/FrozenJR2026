@@ -1,7 +1,7 @@
 # FrozenJR2026 — Project Primer
 
 > Read this first at the start of any session on this project. It is the working context for Claude.
-> Last updated: 2026-10-22. Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: Choreography Vault thumbnail picker that lists the YouTube playlist automatically (2026-10-22); call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
+> Last updated: 2026-10-24 (added **Planned work**: email allow-list access with admin panel, then detailed logging). Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: Choreography Vault thumbnail picker that lists the YouTube playlist automatically (2026-10-22); call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
 > The engine also lives in the template repo `Cheeseman25/ShowPortalTemplate`; future shows are created from it. Engine fixes go there too.
 
 ## What this is
@@ -250,3 +250,55 @@ The same engine can be served from AWS on its own domain with its own call board
 - Deploy: `npm run build:aws`, upload `dist/` to the site bucket, invalidate CloudFront.
 - New shows: use the template repo's `aws/README.md` and CloudFormation stack (this clone was built by hand).
 - Status: side by side, no cutover yet. Planned cutover: rename this repo to a private name and publish a tiny public repo named `FrozenJR2026` containing only a redirect (making this repo private unpublishes its Pages site on a free plan).
+
+## Planned work (not built yet)
+
+Build in this order. Both are engine features: make them in both repos (see CLAUDE.md), with show-specific values in `show/show.config.js`. Both apply to the AWS site only (`npm run build:aws`); the GitHub Pages build is unchanged and keeps the PIN until it is retired.
+
+**Decided (2026-10-24):** Cognito holds logins; the Sheet is only the allow list; invite model (approved Sheet row creates the Cognito user and emails an invite); unknown emails notify the admins with Approve / Deny links; admin panel on the page for use from a phone; detailed logging follows.
+
+**Before starting:** follow CLAUDE.md (fetch, check the Mac copy). Ask the user the open choices at the end of step 1, and load the AWS skills first (`aws-auth`, `aws-serverless`, `aws-iam`, `aws-messaging-and-streaming` for SES). Stay in the project Region (us-east-2); no Lambda@Edge, no cross-Region resources. Ask about the SES sandbox, since new projects start with sending limited to verified addresses.
+
+### 1. Per-user access: Cognito logins, with the Sheet as the registration allow list, plus a phone-friendly admin panel
+
+Goal: visitors have a real login and only listed people can register. The shared staff PIN stays until this ships; it is not real security.
+
+- **Logins and passwords live in Cognito, not the Sheet.** Reuse the pattern already built for ryanjclarke.com `/italy2026` (Lambda `italy2026-auth`: Cognito code + PKCE login, HttpOnly cookie, function URL behind CloudFront OAC; see the `ryanjclarke-site-aws` memory). Copy that pattern into a new user pool for the show (new path, pool, app client, callback URL); don't modify `/italy2026`. The Sheet never holds passwords, hashes or tokens.
+- **The Sheet is only the allow list:** a tab (for example `Access`) with `Email, Name, Role (viewer/crew/admin), Status (approved/denied/pending), AddedBy, AddedOn`. The production crew already edit this Sheet. Emails are compared lowercase and trimmed. It answers one question: "may this email register?"
+- **How the allow list gates registration (decided 2026-10-24: invite model):** the pool stays closed, so nobody can self-register. The Sheet and the admin notification flow control who gets an account:
+  - An email set to `approved` in the Sheet (added by hand, or from the admin panel) gets a Cognito user through `AdminCreateUser`, which emails the invite and temporary password. The server also picks up Sheet edits made by hand (a periodic check or an "Apply changes" button in the panel), so crew can add someone in the Sheet and the invite still goes out.
+  - An email not in the Sheet can ask for access on the login page. That creates a `pending` row and starts the admin notify flow below. Approving it turns the row to `approved` and sends the invite.
+  - Removing a row or setting it to `denied` disables the Cognito user and signs them out.
+- **Reading and writing the Sheet from AWS:** through the existing Apps Script bridge pattern (shared secret kept in Parameter Store, as with `awsSync`), so the Lambda needs no Google credentials. Cache allow-list reads briefly; don't hit the Sheet on every request.
+- **Roles:** the Sheet `Role` column is the source of truth. When a person is approved or their role changes, set the matching Cognito group (`viewer`, `crew`, `admin`) so the Lambda can check the signed token without calling the Sheet.
+- **Where the check runs:** on the server (the AWS Lambda), on every API call, not just in the page. Hiding tabs in the browser is not access control. Cast names are real students, so the cast data endpoint must be protected too. This applies to the AWS site only; the GitHub Pages site has no Cognito and keeps the PIN until it is retired.
+- **Sessions:** use short logins (12 hour cookie and token) like the Italy default.
+- **Unknown email flow:** someone requests access with an email not on the list. The server adds a `pending` row and emails the production crew address(es) (a setting, for example `accessNotifyEmails`). The email shows the person's email and name and has two links, **Approve** and **Deny**. Tapping a link must work from a phone with no login to code or AWS.
+  - Links carry a signed, expiring, single-use token (HMAC with a secret in Parameter Store), bound to the one email and one action.
+  - Mail scanners and link previews fetch links automatically. A GET link must open a small confirmation page with one button that POSTs the decision. Do not change state on GET.
+  - Approve sets the Sheet row to `approved`, creates the Cognito user and sends the invite. Deny sets `denied` and tells the person. Repeat requests from a pending email must not email the crew again.
+  - Sending: SES from the AWS site (needs a verified sender and out of sandbox).
+- **Admin panel on the page:** a staff-only tab (for example `#access`) for `admin` role users, built mobile first. It lists pending requests with Approve / Deny, lists approved people with remove and role change, and has an "Add email" box. Every change goes through the server, updates the Sheet (and Cognito), and records who made it. Removing someone also disables their Cognito user and signs them out (`AdminUserGlobalSignOut`).
+- **Safeguards:** at least one admin email in settings so nobody can lock everyone out; confirm before an admin removes their own admin role; rate-limit access requests so the crew inbox can't be flooded.
+- **Open choices to settle with the user before coding:** crew notification addresses, who counts as admin, whether the whole site or only some tabs are gated, and whether the PIN is retired or kept as a fallback.
+
+**Build plan for step 1 (suggested slices, each testable on its own):**
+1. Cognito user pool and app client for the show (sign-up disabled, 12 hour tokens, groups `viewer` / `crew` / `admin`), plus the login Lambda copied from the Italy pattern. Gate the whole AWS site behind it, with the first admin created by hand.
+2. Apps Script bridge actions to read and update the `Access` tab, protected by the shared secret in Parameter Store. Port them to the template's generic `Code.gs`.
+3. Invite sync: approved row creates the Cognito user and group; denied or removed row disables the user and signs them out.
+4. Request-access form on the login page, `pending` row, admin notification email through SES, and the signed Approve / Deny confirm pages.
+5. Admin panel tab (`#access`), mobile first, checked on a phone-sized screen.
+6. Move the call board write actions from the PIN to the signed-in `crew` / `admin` role. Retire or keep the PIN per the user's choice.
+7. Update the template repo's `aws/README.md` and CloudFormation stack so new shows get the auth setup, and update this primer (Files, Settings, API sections).
+
+New settings to add with safe blank defaults in the engine: `accessNotifyEmails`, `adminEmails`, `accessSheetTab`, and the Cognito pool, client and domain IDs. New secrets (link-signing key, bridge secret) go in Parameter Store under `/tts/<show>/`, never in the repo.
+
+### 2. Detailed activity logging
+
+Goal: know who used the site and what they did. Google Analytics (GA4, `G-1D8TXY3JM5`) stays for traffic trends, but it is anonymous, sampled and blockable, so it can't answer "who".
+
+- **Build on step 1:** once visitors sign in, every event can carry the verified email. Build this after step 1.
+- **What to record:** sign-in, denied or pending attempts, tab views, call saves / edits / archives (with before and after values), access approvals and denials (who decided), music plays and downloads, calendar and Meet link clicks, cast reveals, errors. Each record: time, email, role, action, target, device / browser summary.
+- **Where:** a DynamoDB table on the AWS site written by the Lambda (server-side events cannot be skipped by the browser). The Pages site has no sign-in, so it gets no per-person log. Browser events (tab views, plays) go to a small `/api/log` endpoint that checks the sign-in token. Keep writes cheap (batch, fire and forget, never block the page).
+- **Viewing it:** a staff-only "Activity" view in the admin panel with filters by person, action and date, plus a CSV download.
+- **Privacy:** the cast are minors. Log the minimum (email, action, time); don't store IP addresses or free-text content unless needed. Set a retention period (for example delete after 12 months, using DynamoDB TTL) and say so in the footer or privacy note.
