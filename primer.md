@@ -1,7 +1,7 @@
 # FrozenJR2026 — Project Primer
 
 > Read this first at the start of any session on this project. It is the working context for Claude.
-> Last updated: 2026-10-24 (added **Planned work**: email allow-list access with admin panel, then detailed logging). Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: Choreography Vault thumbnail picker that lists the YouTube playlist automatically (2026-10-22); call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
+> Last updated: 2026-11-05 (added the **Show Casts** page `#shows`, AWS site only for now; see its feature section). Earlier: 2026-10-24 added **Planned work**: email allow-list access with admin panel, then detailed logging. Shared engine (`src/`) + show settings (`show/show.config.js`) with a build step. Recent work: Choreography Vault thumbnail picker that lists the YouTube playlist automatically (2026-10-22); call form start/end pickers, calendar sync (call board → show calendar), and the attach-or-create prompt for calls with no matching calendar event. Status and where each piece lives: see **Calendar sync** below.
 > The engine also lives in the template repo `Cheeseman25/ShowPortalTemplate`; future shows are created from it. Engine fixes go there too.
 
 ## What this is
@@ -43,9 +43,9 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 | `src/App.jsx` | Root component: all state, data loading (fetch from Apps Script / CSV), handlers, memos. Builds a `ctx` object passed to every section. |
 | `src/config.js` | Engine view of the settings (`SHOW` + named constants), page registry (`ALL_TABS` → `TAB_INFO` filtered by the show's `tabs`), `DEFAULT_TAB`, `storageKey()`. |
 | `src/effects/snow.js` | Snow background (selected by `background: "snow"`). |
-| `src/lib/*.js(x)` | Helpers: `analytics` (gtag events), `dates` (call board date parsing), `music` (natural sort), `celebration` (fanfare + confetti), `links` (auto-link URLs), `cast` (`processCastRows`). |
+| `src/lib/*.js(x)` | Helpers: `analytics` (gtag events), `dates` (call board date parsing), `music` (natural sort), `celebration` (fanfare + confetti), `links` (auto-link URLs), `shows` (Shows sheet parsing and the grid/lookup helpers), `cast` (`processCastRows`). |
 | `src/components/` | `Header`, `NavBar` (breadcrumb + tabs), `Footer`, `CallCard` (`renderCallCard(reh, isArchived, ctx)`). |
-| `src/tabs/` | One file per route: `CallBoardTab`, `CastTab`, `CostumesTab`, `MusicTab`, `VideosTab`, `CalendarTab`. Each renders only when its tab is active. |
+| `src/tabs/` | One file per route: `CallBoardTab`, `CastTab`, `ShowsTab`, `CostumesTab`, `MusicTab`, `VideosTab`, `CalendarTab`. Each renders only when its tab is active. |
 | `src/modals/` | `CalendarEventModal`, `CelebrationModal`, `LoginModal`, `EditCallModal` (call form), `CalendarChoiceModal` (attach-or-create prompt after a save). |
 | `src/components/PickerInput.jsx` | Date/time input with a light drawn icon (the browser's dark icon is hidden in `styles.css`). Clicking the icon opens the native picker. |
 | `src/lib/callTimes.js` | Time helpers for the call form: `to24`, `fromTimeInput`, `splitLegacyTime`, `timeRangeLabel`. |
@@ -70,6 +70,8 @@ Fallback: cast also loads from a published-to-web CSV of the sheet (DIRECT_CAST_
 |---|---|
 | `backendUrl` | Apps Script web app `/exec` URL. Changes only if a *new deployment* is created (a new version of the same deployment keeps the URL). |
 | `castCsvUrl` | Published CSV of the cast tab (fallback). |
+| `showsCsvUrl` | Published CSV of the per-show cast tab (Sheet5) for the Show Casts page. Blank = the page has no data source. |
+| `showSchedule` | Date and time of each show for the Show Casts page, matched by order to the sheet's show blocks: `[{ label, week, date, time }]`. Frozen uses 12-hour times ("6:30 PM"). Missing entries fall back to the sheet's own header text. |
 | `calendarId` | Public Google Calendar for the season (also hardcoded in Frozen's Apps Script `CONFIG.CALENDAR_ID`). Calendar sync writes call details into its events. |
 | `musicFolderUrl` | Drive music folder (same ID as Apps Script `MUSIC_ROOT_FOLDER_ID`). |
 | `youtubePlaylistId` | YouTube playlist embedded in the music tab. |
@@ -91,6 +93,7 @@ Hash-based routing on a single page. `TAB_INFO` is the route table; `getInitialT
 |---|---|---|
 | `#callboard` (default) | 📅 Call Board & Schedule | Rehearsal call notices from the Sheet |
 | `#cast` | 🎭 Cast Members | Mystery reveal cast cards |
+| `#shows` | 🎟️ Show Casts | Who is in which of the six shows (grid, by show, by performer, together). **Enabled on the AWS site only** via `tabs` in `show/show.aws.config.js`; hidden on GitHub Pages |
 | `#costumes` | 👗 Costumes | **Placeholder** ("coming soon"), confirmed empty, no content yet |
 | `#music` | 🎵 Rehearsal Tracks | Drive audio player + YouTube playlist sub-view |
 | `#videos` | 🎬 Choreography Vault | Thumbnail picker over the choreography YouTube playlist (see section below) |
@@ -129,6 +132,16 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Search by performer or character; category filter chips (All Cast A–Z, Principal, Featured Ensemble, Ensemble).
 - Refresh Cast button. Cast parsed by `processCastRows()`: finds columns by header keywords (category/type/group/tier; role/character/part; Cast A = summer/snow/cast a/actor/name; Cast B = winter/ice/cast b), drops "TBD", merges an actor's multiple roles into one card.
 - Currently ~69 performers across Principal, Featured Ensemble, Ensemble.
+
+### Show Casts (`#shows`)
+Built 2026-11-05 on the AWS site first. Four views over one table (character, show, actor), chosen by buttons at the top:
+- **Grid:** characters down the left in sheet order (that order is the billing order), the six shows across with Week 1 / Week 2 labels. Each column header is a block with the date and the time (12-hour). Cells hold the actor's name; tapping a name opens By Performer, tapping a header opens By Show. The filter box matches characters and performers (matching names turn amber). No show-count column on purpose: the director does not want children comparing how many shows they have.
+- **By Show:** pick one of six show buttons for the full cast, one entry per person with their role(s) joined by " · ".
+- **By Performer:** search a name, see their roles in each of the six shows (3 + 3), with a "Who am I on stage with?" shortcut. No total count, for the same reason as the grid.
+- **Together:** pick one or more performers; "All together" shows the shows that contain every chosen performer, "Any of them" shows shows with at least one. Each show lists who is in it and their roles.
+- **Data:** the sheet tab `Sheet5` in "Frozen Jr. (Fall 2026)" (spreadsheet `1VR677FXzFn5rlNJj6D9-wD2LC0hags8cBR9izEdjKzM`), web-published as CSV (`showsCsvUrl`, gid `1581355586`; same publish ID as `castCsvUrl`). Layout: row 1 show labels, row 2 headings, then one `Character` + `Actor` column pair per show side by side with a blank spacer column. Rows are matched by position, so a repeated role (Chorus, Oaken Family, Castle Staff, Featured Townspeople) stays as separate rows. A person with two roles in one show appears once per show in the person-based views. Names are matched case-insensitively with spaces collapsed, so use the same full name everywhere. The page reads the published CSV in the browser (no backend). Parsed data is cached in `localStorage` key `<prefix>_shows_data_v2`.
+- Code: `src/tabs/ShowsTab.jsx`, `src/lib/shows.js` (`parseCsv`, `parseShowRows`, `buildCharacterRows`, `indexAssignments`, `togetherByShow`). Settings `showsCsvUrl`, `showSchedule`; page key `shows` in `ALL_TABS` (`src/config.js`).
+- Privacy: the published CSV is public like the cast list and shows real children's names and show assignments. The planned sign-in (see Planned work) should cover it; until then, publish only tabs that hold no contact details.
 
 ### Costumes (`#costumes`) — placeholder only.
 
@@ -183,6 +196,7 @@ Rehearsals sheet columns: `ID, Title, Date, StartTime, EndTime, Location, Type, 
 
 ## Known issues, risks and gotchas
 
+- **Unused Apps Script action `getShows`** (deployed as Apps Script version 30 on 2026-11-05) reads a tab named `Sheet5` in the script's own spreadsheet, which has no such tab, so it returns `[]`. The Show Casts page does not use it (it reads the published CSV). Remove it in the next script deploy; it is also in local `apps-script/Code.gs` (`CONFIG.SHOWS_SHEET_NAME`, `getShowCasts`).
 - **Admin PIN is in the Apps Script.** `DEFAULT_ADMIN_PIN` is hardcoded. The repo is public, so the local copy (`apps-script/`) is git-ignored. Never commit it or paste the PIN into tracked files.
 - **YouTube API key is in `show/show.config.js`** (`youtubeApiKey`). The repo is public, so anyone can read it. It is safe only because Google Cloud restricts it to HTTP referrer `https://cheeseman25.github.io/*` and to the YouTube Data API v3. If the key leaks or the restrictions change, rotate it in Google Cloud and update the setting.
 - Auth is a shared PIN, stored in `sessionStorage` and sent with every write. Fine for a call board; not real security.
@@ -248,6 +262,7 @@ The same engine can be served from AWS on its own domain with its own call board
 - Secrets in SSM SecureStrings `/tts/frozen2026/{admin-pin,sync-secret,youtube-key}`. The YouTube key has no website restriction and is limited to YouTube Data API v3. The old key in this repo's history is burned; delete it in Google Cloud once the Pages site is retired.
 - POSTs through CloudFront must send `x-amz-content-sha256`; `src/lib/callApi.js` does it for relative URLs.
 - Deploy: `npm run build:aws`, upload `dist/` to the site bucket, invalidate CloudFront.
+- The Show Casts tab (`shows`) is listed in `tabs` in `show/show.aws.config.js`, so only this site shows it. Deploy as usual; the CSS file hash changes when new classes are used, so upload every changed file in `dist/assets/` plus `index.html`.
 - New shows: use the template repo's `aws/README.md` and CloudFormation stack (this clone was built by hand).
 - Status: side by side, no cutover yet. Planned cutover: rename this repo to a private name and publish a tiny public repo named `FrozenJR2026` containing only a redirect (making this repo private unpublishes its Pages site on a free plan).
 
