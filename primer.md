@@ -272,7 +272,7 @@ The same engine can be served from AWS on its own domain with its own call board
 
 ## Planned work (not built yet)
 
-Build in this order. Both are engine features: make them in both repos (see CLAUDE.md), with show-specific values in `show/show.config.js`. Both apply to the AWS site only (`npm run build:aws`); the GitHub Pages build is unchanged and keeps the PIN until it is retired.
+Build in this order (step 3 is best built together with step 1). All three are engine features: make them in both repos (see CLAUDE.md), with show-specific values in `show/show.config.js`. They apply to the AWS site only (`npm run build:aws`); the GitHub Pages build is unchanged and keeps the PIN until it is retired.
 
 **Decided (2026-10-24):** Cognito holds logins; the Sheet is only the allow list; invite model (approved Sheet row creates the Cognito user and emails an invite); unknown emails notify the admins with Approve / Deny links; admin panel on the page for use from a phone; detailed logging follows.
 
@@ -321,3 +321,14 @@ Goal: know who used the site and what they did. Google Analytics (GA4, `G-1D8TXY
 - **Where:** a DynamoDB table on the AWS site written by the Lambda (server-side events cannot be skipped by the browser). The Pages site has no sign-in, so it gets no per-person log. Browser events (tab views, plays) go to a small `/api/log` endpoint that checks the sign-in token. Keep writes cheap (batch, fire and forget, never block the page).
 - **Viewing it:** a staff-only "Activity" view in the admin panel with filters by person, action and date, plus a CSV download.
 - **Privacy:** the cast are minors. Log the minimum (email, action, time); don't store IP addresses or free-text content unless needed. Set a retention period (for example delete after 12 months, using DynamoDB TTL) and say so in the footer or privacy note.
+
+### 3. Private Google Sheets access: a service account instead of web-published links
+Goal: the production team keeps editing the Sheet as a group, but the data is not published to the web. Only the owner, the team members the owner shares with, Claude (through the owner's Google connection) and the Lambda can read it. Decided as a direction on 2026-11-05; not built.
+
+- **Why:** a web-published tab is readable by anyone who has the link, and the Frozen publish link is already in public git history (see Known issues). The `/api/cast` and `/api/shows` routes hide the link from the page, but the data itself is still published. A private sheet has no link to leak and nothing to rotate.
+- **How:** create a Google Cloud project (free), switch on the Sheets API, create a **service account** (a robot Google login with its own email), and share the spreadsheet with that email as **Viewer**. The Lambda signs in as the robot and reads tabs with `spreadsheets.values.get`; the page keeps calling `/api/cast` and `/api/shows`, so the front end does not change. Unpublish the tabs afterwards.
+- **Credential:** start with the robot's JSON key in SSM Parameter Store as a SecureString (same pattern as the PIN and YouTube key). A keyless option exists (workload identity federation, where the Lambda's AWS role is trusted by Google); more setup, so only if the key becomes a concern.
+- **Code:** replace the "fetch the published CSV link" step in `readSheet()` (`aws/callboard-api/index.mjs`) with a Sheets API call. Sign the Google token request with Node's built-in `crypto` (RS256) to avoid a large library. Keep the 60 second cache, the last-good-copy fallback and the tests; add tests for token failure and an unshared sheet. New settings: spreadsheet ID and tab names per route (not secret). The `CAST_CSV_URL` / `SHOWS_CSV_URL` variables and the `CastCsvUrl` / `ShowsCsvUrl` stack parameters are then retired.
+- **Combine with step 1:** with Cognito in front, the routes also check who is asking, so the cast list needs both a login and the private sheet.
+- **Later, same pattern:** the Calendar and the music folder (now read through Apps Script) can move to the Calendar and Drive APIs with the same robot.
+- **Cost:** none at this scale (Sheets API read quota is far above the use here). Updates appear in about a minute instead of the several-minute lag of a published copy. Setup is about 20 minutes of clicking in Google Cloud plus the code change.
