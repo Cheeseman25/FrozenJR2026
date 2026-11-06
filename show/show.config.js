@@ -60,7 +60,17 @@ module.exports = {
   ],
 
   // ---------------------------------------------------------------- features
-  // Pages shown in the menu, in order. Available: callboard, cast, costumes, music, videos, calendar.
+  // Show dates/times for the Show Casts page, in the same order as the blocks in the sheet tab.
+  showSchedule: [
+    { label: "Show 1", week: 1, date: "Fri 8 Jan", time: "6:30 PM" },
+    { label: "Show 2", week: 1, date: "Sat 9 Jan", time: "6:30 PM" },
+    { label: "Show 3", week: 1, date: "Sun 10 Jan", time: "4:00 PM" },
+    { label: "Show 4", week: 2, date: "Fri 15 Jan", time: "6:30 PM" },
+    { label: "Show 5", week: 2, date: "Sat 16 Jan", time: "6:30 PM" },
+    { label: "Show 6", week: 2, date: "Sun 17 Jan", time: "4:00 PM" },
+  ],
+
+  // Pages shown in the menu, in order. Available: callboard, cast, shows, costumes, music, videos, calendar.
   tabs: ["callboard", "cast", "costumes", "music", "videos", "calendar"],
 
   // Choices in the staff "New Rehearsal Call" form (staff can also type a custom one).
